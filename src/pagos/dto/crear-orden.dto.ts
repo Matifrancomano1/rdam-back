@@ -1,7 +1,12 @@
-import { IsString, IsNumber, IsEmail, IsOptional, IsIn, IsDateString } from 'class-validator';
+import { IsString, IsNumber, IsEmail } from 'class-validator';
 
 export class CrearOrdenDto {
-  @IsString() expedienteId: string;
-  @IsNumber() monto: number;
-  @IsEmail() email: string;
+  @IsString()
+  expedienteId: string;
+
+  @IsNumber()
+  monto: number;
+
+  @IsEmail()
+  email: string;
 }

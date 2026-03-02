@@ -36,7 +36,7 @@ campusback/
 │   │
 │   ├── pagos/                           # Pagos y órdenes
 │   │   ├── pagos.module.ts
-│   │   ├── pagos.controller.ts          # POST /crear-orden, /registrar-manual — GET /expediente/:id
+│   │   ├── pagos.controller.ts          # POST /crear-orden — GET /expediente/:id
 │   │   ├── pagos.service.ts
 │   │   └── dto/
 │   │       └── create-pago.dto.ts

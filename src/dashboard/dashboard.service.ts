@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { expedientesStore } from '../expedientes/expedientes.service';
 
+export interface ActividadEntry {
+  id: string;
+  tipo: string;
+  expediente: { id: string; numeroExpediente: string; deudor: string };
+  usuario: { id: string; nombre: string };
+  fecha: string;
+}
+
 @Injectable()
 export class DashboardService {
   getMetricas() {
@@ -12,7 +20,9 @@ export class DashboardService {
     const total = all.length;
     const pendientesRevision = countByState('Pendiente de Revisión');
     const aprobados = countByState('Aprobado - Pendiente de Pago');
-    const pagoConfirmado = countByState('Pago Confirmado - Pendiente Validación');
+    const pagoConfirmado = countByState(
+      'Pago Confirmado - Pendiente Validación',
+    );
     const certificados = countByState('Certificado Emitido');
     const rechazados = countByState('Rechazado');
     const expirados = countByState('Expirado');
@@ -37,19 +47,45 @@ export class DashboardService {
         certificadosEmitidos: certificados,
       },
       porEstado: [
-        { estado: 'Pendiente de Revisión', cantidad: pendientesRevision, porcentaje: pct(pendientesRevision) },
-        { estado: 'Aprobado - Pendiente de Pago', cantidad: aprobados, porcentaje: pct(aprobados) },
-        { estado: 'Pago Confirmado - Pendiente Validación', cantidad: pagoConfirmado, porcentaje: pct(pagoConfirmado) },
-        { estado: 'Certificado Emitido', cantidad: certificados, porcentaje: pct(certificados) },
-        { estado: 'Rechazado', cantidad: rechazados, porcentaje: pct(rechazados) },
+        {
+          estado: 'Pendiente de Revisión',
+          cantidad: pendientesRevision,
+          porcentaje: pct(pendientesRevision),
+        },
+        {
+          estado: 'Aprobado - Pendiente de Pago',
+          cantidad: aprobados,
+          porcentaje: pct(aprobados),
+        },
+        {
+          estado: 'Pago Confirmado - Pendiente Validación',
+          cantidad: pagoConfirmado,
+          porcentaje: pct(pagoConfirmado),
+        },
+        {
+          estado: 'Certificado Emitido',
+          cantidad: certificados,
+          porcentaje: pct(certificados),
+        },
+        {
+          estado: 'Rechazado',
+          cantidad: rechazados,
+          porcentaje: pct(rechazados),
+        },
         { estado: 'Expirado', cantidad: expirados, porcentaje: pct(expirados) },
       ],
       tendencias: {
         ultimoMes: {
           nuevos: lastMonthExps.length,
-          aprobados: lastMonthExps.filter((e) => e.estado.actual === 'Aprobado - Pendiente de Pago').length,
-          rechazados: lastMonthExps.filter((e) => e.estado.actual === 'Rechazado').length,
-          certificados: lastMonthExps.filter((e) => e.estado.actual === 'Certificado Emitido').length,
+          aprobados: lastMonthExps.filter(
+            (e) => e.estado.actual === 'Aprobado - Pendiente de Pago',
+          ).length,
+          rechazados: lastMonthExps.filter(
+            (e) => e.estado.actual === 'Rechazado',
+          ).length,
+          certificados: lastMonthExps.filter(
+            (e) => e.estado.actual === 'Certificado Emitido',
+          ).length,
         },
         variacion: { nuevos: 0, aprobados: 0, rechazados: 0, certificados: 0 },
       },
@@ -62,7 +98,7 @@ export class DashboardService {
 
   getActividadReciente(limit: number = 10) {
     // Gather historial entries from all expedientes, sorted by date desc
-    const actividades: any[] = [];
+    const actividades: ActividadEntry[] = [];
     for (const exp of expedientesStore) {
       for (const h of exp.historial) {
         actividades.push({
@@ -78,7 +114,9 @@ export class DashboardService {
         });
       }
     }
-    actividades.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    actividades.sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+    );
     return { actividades: actividades.slice(0, limit) };
   }
 
@@ -86,7 +124,7 @@ export class DashboardService {
     const map: Record<string, string> = {
       'Pendiente de Revisión': 'EXPEDIENTE_CREADO',
       'Aprobado - Pendiente de Pago': 'EXPEDIENTE_APROBADO',
-      'Rechazado': 'EXPEDIENTE_RECHAZADO',
+      'Rechazado ': 'EXPEDIENTE_RECHAZADO',
       'Pago Confirmado - Pendiente Validación': 'PAGO_CONFIRMADO',
       'Certificado Emitido': 'CERTIFICADO_EMITIDO',
     };

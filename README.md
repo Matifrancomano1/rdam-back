@@ -65,7 +65,7 @@ Authorization: Bearer <accessToken>
 | Auth         | `/v1/auth`         | Login, logout, refresh, perfil                   |
 | Usuarios     | `/v1/usuarios`     | CRUD de usuarios (solo Administrador)            |
 | Expedientes  | `/v1/expedientes`  | Gestión de expedientes, documentos, certificados |
-| Pagos        | `/v1/pagos`        | Órdenes de pago y registro manual                |
+| Pagos        | `/v1/pagos`        | Órdenes de pago                 |
 | Certificados | `/v1/certificados` | Generación y validación de certificados          |
 | Dashboard    | `/v1/dashboard`    | Estadísticas y métricas                          |
 | Auditoría    | `/v1/auditoria`    | Log de eventos del sistema                       |

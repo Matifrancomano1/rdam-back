@@ -8,7 +8,6 @@ import {
 } from '@nestjs/common';
 import { PagosService } from './pagos.service';
 import { CrearOrdenDto } from './dto/crear-orden.dto';
-import { RegistrarManualDto } from './dto/registrar-manual.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -24,11 +23,5 @@ export class PagosController {
   @HttpCode(HttpStatus.OK)
   crearOrden(@Body() dto: CrearOrdenDto) {
     return successResponse(this.pagosService.crearOrden(dto));
-  }
-
-  @Post('registrar-manual')
-  @HttpCode(HttpStatus.CREATED)
-  registrarManual(@Body() dto: RegistrarManualDto) {
-    return successResponse(this.pagosService.registrarManual(dto));
   }
 }
