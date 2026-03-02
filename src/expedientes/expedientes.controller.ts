@@ -12,7 +12,9 @@ import {
   UploadedFile,
   HttpCode,
   HttpStatus,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ExpedientesService } from './expedientes.service';
 import { CreateExpedienteDto } from './dto/create-expediente.dto';
@@ -23,6 +25,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { successResponse } from '../common/response.helper';
 import { IsString, IsOptional } from 'class-validator';
+import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 
 class ActionDto {
   @IsString() @IsOptional() observaciones?: string;
@@ -41,7 +44,7 @@ export class ExpedientesController {
   @Post()
   @Roles('Operador', 'Administrador')
   @HttpCode(HttpStatus.CREATED)
-  create(@Body() dto: CreateExpedienteDto, @CurrentUser() user: any) {
+  create(@Body() dto: CreateExpedienteDto, @CurrentUser() user: JwtPayload) {
     const data = this.expedientesService.create(dto, user);
     return successResponse(data);
   }
@@ -89,7 +92,7 @@ export class ExpedientesController {
   aprobar(
     @Param('id') id: string,
     @Body() dto: ActionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: JwtPayload,
   ) {
     return successResponse(
       this.expedientesService.aprobar(id, dto.observaciones ?? '', user),
@@ -102,7 +105,7 @@ export class ExpedientesController {
   rechazar(
     @Param('id') id: string,
     @Body() dto: ActionDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: JwtPayload,
   ) {
     return successResponse(
       this.expedientesService.rechazar(id, dto.observaciones ?? '', user),
@@ -121,7 +124,7 @@ export class ExpedientesController {
   uploadDocumento(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: any,
+    @CurrentUser() user: JwtPayload,
   ) {
     const data = this.expedientesService.addDocumento(id, file, user.id);
     return successResponse({ ...data, expedienteId: id });
@@ -144,7 +147,7 @@ export class ExpedientesController {
   validarPago(
     @Param('id') id: string,
     @Body() dto: ValidarPagoDto,
-    @CurrentUser() user: any,
+    @CurrentUser() user: JwtPayload,
   ) {
     return successResponse(
       this.expedientesService.validarPago(
@@ -154,5 +157,35 @@ export class ExpedientesController {
         user,
       ),
     );
+  }
+
+  @Post(':id/certificado')
+  @Roles('Operador', 'Administrador')
+  @UseInterceptors(FileInterceptor('archivo'))
+  @HttpCode(HttpStatus.CREATED)
+  subirCertificado(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return successResponse(
+      this.expedientesService.subirCertificadoPdf(id, file, user),
+    );
+  }
+
+  @Get(':id/certificado/descargar')
+  descargarCertificado(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Res() res: Response,
+  ) {
+    const cert = this.expedientesService.descargarCertificadoPdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${cert.nombreArchivo}"`,
+      'X-Certificate-Hash': `sha256:${cert.hashSha256}`,
+      'X-Valid-Until': cert.fechaVencimiento.substring(0, 10),
+    });
+    res.send(cert.buffer);
   }
 }

@@ -1,98 +1,117 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# RDAM — Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Backend REST para el sistema de **Registro de Deuda Alimentaria Morosa (RDAM)** de la provincia de Santa Fe. Desarrollado con **NestJS + TypeScript** con almacenamiento en memoria (POC).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 🚀 Stack
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+| Tecnología      | Uso                                 |
+| --------------- | ----------------------------------- |
+| NestJS          | Framework principal                 |
+| TypeScript      | Lenguaje                            |
+| JWT (HS256)     | Autenticación stateless             |
+| bcryptjs        | Hash de contraseñas                 |
+| multer          | Subida de archivos PDF              |
+| class-validator | Validación de DTOs                  |
+| uuid            | Generación de IDs                   |
+| Almacenamiento  | In-memory (arrays) — sin base datos |
 
-## Project setup
+---
+
+## ⚙️ Instalación y ejecución
 
 ```bash
-$ npm install
+# Instalar dependencias
+npm install
+
+# Modo desarrollo (hot-reload)
+npm run start:dev
+
+# Modo producción
+npm run start:prod
 ```
 
-## Compile and run the project
+La API queda disponible en: `http://localhost:3000/v1`
+
+---
+
+## 🔐 Autenticación
+
+Todos los endpoints (excepto `/auth/login`, `/auth/refresh` y `GET /certificados/validar/:numero`) requieren un token JWT en el header:
+
+```
+Authorization: Bearer <accessToken>
+```
+
+**Roles disponibles:** `Administrador`, `Operador`, `Ciudadano`
+
+---
+
+## 👥 Usuarios de prueba (seed data)
+
+| Username     | Password        | Rol           | Email                         |
+| ------------ | --------------- | ------------- | ----------------------------- |
+| `admin`      | `Admin123!`     | Administrador | admin@rdam.gob.ar             |
+| `operador1`  | `Operador123!`  | Operador      | matias.francomano@rdam.gob.ar |
+| `ciudadano1` | `Ciudadano123!` | Ciudadano     | juan.perez@email.com          |
+
+---
+
+## 📋 Módulos y endpoints
+
+| Módulo       | Prefijo            | Descripción                                      |
+| ------------ | ------------------ | ------------------------------------------------ |
+| Auth         | `/v1/auth`         | Login, logout, refresh, perfil                   |
+| Usuarios     | `/v1/usuarios`     | CRUD de usuarios (solo Administrador)            |
+| Expedientes  | `/v1/expedientes`  | Gestión de expedientes, documentos, certificados |
+| Pagos        | `/v1/pagos`        | Órdenes de pago y registro manual                |
+| Certificados | `/v1/certificados` | Generación y validación de certificados          |
+| Dashboard    | `/v1/dashboard`    | Estadísticas y métricas                          |
+| Auditoría    | `/v1/auditoria`    | Log de eventos del sistema                       |
+| Webhooks     | `/v1/webhooks`     | Notificaciones de pasarela de pago               |
+
+Ver [`API-CONTRACT.md`](./API-CONTRACT.md) para la documentación completa de cada endpoint.
+
+---
+
+## 📄 Flujo principal de un expediente
+
+```
+Pendiente de Revisión
+  → [aprobar]  → Aprobado - Pendiente de Pago
+  → [pago]     → Pago Confirmado - Pendiente Validación
+  → [cert PDF] → Certificado Emitido
+```
+
+Ver [`POSTMAN-GUIA.md`](./POSTMAN-GUIA.md) para la guía paso a paso de testing.
+
+---
+
+## 🗂️ Estructura del proyecto
+
+Ver [`ESTRUCTURA.md`](./ESTRUCTURA.md) para el árbol de archivos detallado.
+
+---
+
+## 🧪 Tests
 
 ```bash
-# development
-$ npm run start
+# Unit tests
+npm run test
 
-# watch mode
-$ npm run start:dev
+# E2E tests
+npm run test:e2e
 
-# production mode
-$ npm run start:prod
+# Cobertura
+npm run test:cov
 ```
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ npm run test
+## 📝 Notas de diseño
 
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- **Sin base de datos:** los datos viven en arrays en memoria. Al reiniciar el servidor se pierden (excepto el seed).
+- **Certificados:** se almacenan como `Buffer` en memoria (solo POC). En producción deberían ir a S3 o similar.
+- **Tipo de usuario compartido:** `JwtPayload` definido en `src/common/interfaces/jwt-payload.interface.ts` y usado en todos los módulos.
+- **Prefijo global:** todas las rutas tienen el prefijo `/v1` configurado en `main.ts`.

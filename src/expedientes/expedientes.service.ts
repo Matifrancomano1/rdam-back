@@ -2,10 +2,14 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
 import { CreateExpedienteDto } from './dto/create-expediente.dto';
 import { UpdateExpedienteDto } from './dto/update-expediente.dto';
+import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 
 export type EstadoExpediente =
   | 'Pendiente de Revisión'
@@ -36,6 +40,18 @@ export interface DocumentoExpediente {
   fechaSubida: string;
 }
 
+export interface CertificadoPdf {
+  id: string;
+  numeroCertificado: string;
+  nombreArchivo: string;
+  tamanoBytes: number;
+  hashSha256: string;
+  buffer: Buffer; // In-memory (POC)
+  fechaEmision: string;
+  fechaVencimiento: string;
+  urlDescarga: string;
+}
+
 export interface Expediente {
   id: string;
   numeroExpediente: string;
@@ -58,6 +74,7 @@ export interface Expediente {
   };
   pagos: string[]; // pago IDs
   documentos: DocumentoExpediente[];
+  certificadoPdf?: CertificadoPdf;
   metadata: {
     fechaCreacion: string;
     fechaActualizacion: string;
@@ -81,7 +98,7 @@ function generateNumeroExpediente(): string {
 
 @Injectable()
 export class ExpedientesService {
-  create(dto: CreateExpedienteDto, user: { id: string; nombre: string }) {
+  create(dto: CreateExpedienteDto, user: JwtPayload) {
     const now = new Date().toISOString();
     const id = uuidv4();
     const expediente: Expediente = {
@@ -159,20 +176,26 @@ export class ExpedientesService {
     }
 
     if (query.fecha)
-      list = list.filter((e) => e.metadata.fechaCreacion.startsWith(query.fecha!));
+      list = list.filter((e) =>
+        e.metadata.fechaCreacion.startsWith(query.fecha!),
+      );
     if (query.montoMin !== undefined)
       list = list.filter((e) => e.deuda.montoAdeudado >= query.montoMin!);
     if (query.montoMax !== undefined)
       list = list.filter((e) => e.deuda.montoAdeudado <= query.montoMax!);
 
     // Sorting
-    const sortBy = (query.sortBy ?? 'fechaCreacion') as string;
+    const sortBy = query.sortBy ?? 'fechaCreacion';
     const sortOrder = query.sortOrder ?? 'desc';
     list.sort((a, b) => {
       const aVal =
-        sortBy === 'fechaCreacion' ? a.metadata.fechaCreacion : a.deuda.montoAdeudado;
+        sortBy === 'fechaCreacion'
+          ? a.metadata.fechaCreacion
+          : a.deuda.montoAdeudado;
       const bVal =
-        sortBy === 'fechaCreacion' ? b.metadata.fechaCreacion : b.deuda.montoAdeudado;
+        sortBy === 'fechaCreacion'
+          ? b.metadata.fechaCreacion
+          : b.deuda.montoAdeudado;
       const cmp = aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
       return sortOrder === 'asc' ? cmp : -cmp;
     });
@@ -183,7 +206,7 @@ export class ExpedientesService {
     const sliced = list.slice((page - 1) * limit, page * limit);
 
     return {
-      expedientes: sliced.map(this.toListItem),
+      expedientes: sliced.map((e) => this.toListItem(e)),
       pagination: {
         page,
         limit,
@@ -206,18 +229,22 @@ export class ExpedientesService {
     if (!exp) throw new NotFoundException('Expediente no encontrado');
     if (dto.deudor?.email) exp.deudor.email = dto.deudor.email;
     if (dto.deudor?.telefono) exp.deudor.telefono = dto.deudor.telefono;
-    if (dto.deuda?.montoAdeudado) exp.deuda.montoAdeudado = dto.deuda.montoAdeudado;
-    if (dto.deuda?.periodoDeuda) exp.deuda.periodoDeuda = dto.deuda.periodoDeuda;
+    if (dto.deuda?.montoAdeudado)
+      exp.deuda.montoAdeudado = dto.deuda.montoAdeudado;
+    if (dto.deuda?.periodoDeuda)
+      exp.deuda.periodoDeuda = dto.deuda.periodoDeuda;
     if (dto.observaciones) exp.metadata.observaciones = dto.observaciones;
     exp.metadata.fechaActualizacion = new Date().toISOString();
     return this.toResponse(exp);
   }
 
-  aprobar(id: string, observaciones: string, user: { id: string; nombre: string }) {
+  aprobar(id: string, observaciones: string, user: JwtPayload) {
     const exp = expedientesStore.find((e) => e.id === id);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
     if (exp.estado.actual !== 'Pendiente de Revisión')
-      throw new ConflictException('El expediente no puede ser aprobado en su estado actual');
+      throw new ConflictException(
+        'El expediente no puede ser aprobado en su estado actual',
+      );
 
     const now = new Date().toISOString();
     const estadoAnterior = exp.estado.actual;
@@ -247,11 +274,17 @@ export class ExpedientesService {
     };
   }
 
-  rechazar(id: string, observaciones: string, user: { id: string; nombre: string }) {
+  rechazar(id: string, observaciones: string, user: JwtPayload) {
     const exp = expedientesStore.find((e) => e.id === id);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
-    if (!['Pendiente de Revisión', 'Aprobado - Pendiente de Pago'].includes(exp.estado.actual))
-      throw new ConflictException('El expediente no puede ser rechazado en su estado actual');
+    if (
+      !['Pendiente de Revisión', 'Aprobado - Pendiente de Pago'].includes(
+        exp.estado.actual,
+      )
+    )
+      throw new ConflictException(
+        'El expediente no puede ser rechazado en su estado actual',
+      );
 
     const now = new Date().toISOString();
     const estadoAnterior = exp.estado.actual;
@@ -322,12 +355,14 @@ export class ExpedientesService {
     id: string,
     pagoId: string,
     observaciones: string,
-    user: { id: string; nombre: string },
+    user: JwtPayload,
   ) {
     const exp = expedientesStore.find((e) => e.id === id);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
     if (exp.estado.actual !== 'Pago Confirmado - Pendiente Validación')
-      throw new ConflictException('El expediente no está en estado de validación de pago');
+      throw new ConflictException(
+        'El expediente no está en estado de validación de pago',
+      );
 
     const now = new Date().toISOString();
     const estadoAnterior = exp.estado.actual;
@@ -363,6 +398,103 @@ export class ExpedientesService {
       exp.estado.fechaActualizacion = new Date().toISOString();
       exp.pagos.push(pagoId);
     }
+  }
+
+  subirCertificadoPdf(id: string, file: Express.Multer.File, user: JwtPayload) {
+    const exp = expedientesStore.find((e) => e.id === id);
+    if (!exp) throw new NotFoundException('Expediente no encontrado');
+
+    if (exp.estado.actual !== 'Pago Confirmado - Pendiente Validación')
+      throw new ConflictException(
+        'INVALID_STATE_TRANSITION: El expediente no está en estado "Pago Confirmado - Pendiente Validación"',
+      );
+
+    if (exp.certificadoPdf)
+      throw new ConflictException(
+        'CERTIFICADO_YA_EXISTE: Ya existe un certificado activo para este expediente',
+      );
+
+    if (file.mimetype !== 'application/pdf')
+      throw new BadRequestException(
+        'INVALID_FILE_TYPE: Solo se aceptan archivos PDF',
+      );
+
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+    if (file.size > MAX_SIZE)
+      throw new BadRequestException(
+        'FILE_TOO_LARGE: El tamaño máximo es 10 MB',
+      );
+
+    const now = new Date();
+    const vencimiento = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const year = now.getFullYear();
+    const hash = createHash('sha256').update(file.buffer).digest('hex');
+    const numeroCertificado = `CERT-RDAM-${year}-${uuidv4().substring(0, 8).toUpperCase()}`;
+    const certId = uuidv4();
+
+    const cert: CertificadoPdf = {
+      id: certId,
+      numeroCertificado,
+      nombreArchivo: file.originalname,
+      tamanoBytes: file.size,
+      hashSha256: hash,
+      buffer: file.buffer,
+      fechaEmision: now.toISOString(),
+      fechaVencimiento: vencimiento.toISOString(),
+      urlDescarga: `/expedientes/${id}/certificado/descargar`,
+    };
+
+    exp.certificadoPdf = cert;
+
+    // Transition state
+    const estadoAnterior = exp.estado.actual;
+    exp.estado.actual = 'Certificado Emitido';
+    exp.estado.fechaActualizacion = now.toISOString();
+    exp.historial.push({
+      id: uuidv4(),
+      estadoAnterior,
+      estadoNuevo: 'Certificado Emitido',
+      usuario: { id: user.id, nombre: user.nombre },
+      fechaCambio: now.toISOString(),
+      observaciones: 'Certificado PDF subido por operador',
+      ipAddress: '0.0.0.0',
+      metadata: { certId, numeroCertificado },
+    });
+
+    return {
+      id: certId,
+      expedienteId: id,
+      numeroCertificado,
+      nombreArchivo: file.originalname,
+      tamanoBytes: file.size,
+      hashSha256: hash,
+      fechaEmision: now.toISOString(),
+      fechaVencimiento: vencimiento.toISOString(),
+      urlDescarga: `/expedientes/${id}/certificado/descargar`,
+      estadoExpediente: 'Certificado Emitido',
+    };
+  }
+
+  descargarCertificadoPdf(id: string, requestingUser: JwtPayload) {
+    const exp = expedientesStore.find((e) => e.id === id);
+    if (!exp) throw new NotFoundException('Expediente no encontrado');
+
+    if (!exp.certificadoPdf)
+      throw new NotFoundException(
+        'CERTIFICADO_NO_ENCONTRADO: No existe certificado activo para este expediente',
+      );
+
+    // RLS: citizens can only access their own expediente
+    if (requestingUser.rol === 'Ciudadano') {
+      const emailMatch =
+        exp.deudor.email.toLowerCase() === requestingUser.email.toLowerCase();
+      if (!emailMatch)
+        throw new ForbiddenException(
+          'INSUFFICIENT_PERMISSIONS: El email no coincide con el del expediente',
+        );
+    }
+
+    return exp.certificadoPdf;
   }
 
   private toListItem(e: Expediente) {

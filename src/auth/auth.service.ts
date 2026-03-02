@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
 import { JWT_SECRET } from './strategies/jwt.strategy';
 
 export interface StoredUser {
@@ -50,6 +49,19 @@ export const usersStore: StoredUser[] = [
     fechaCreacion: '2025-01-15T08:00:00Z',
     ultimoAcceso: undefined,
   },
+  {
+    id: 'uuid-user-003',
+    username: 'ciudadano1',
+    nombre: 'Juan Carlos Pérez González',
+    email: 'juan.perez@email.com',
+    telefono: '+54 11 1234-5678',
+    passwordHash: bcrypt.hashSync('Ciudadano123!', 10),
+    rol: 'Ciudadano',
+    departamento: 'Externo',
+    activo: true,
+    fechaCreacion: '2026-01-01T00:00:00Z',
+    ultimoAcceso: undefined,
+  },
 ];
 
 // Revoked access tokens (simple blacklist)
@@ -60,9 +72,7 @@ export class AuthService {
   constructor(private jwtService: JwtService) {}
 
   async login(username: string, password: string) {
-    const user = usersStore.find(
-      (u) => u.username === username && u.activo,
-    );
+    const user = usersStore.find((u) => u.username === username && u.activo);
     if (!user) throw new UnauthorizedException('INVALID_CREDENTIALS');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
@@ -104,11 +114,16 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string) {
+  refresh(refreshToken: string) {
+    interface RefreshPayload {
+      sub: string;
+      type: string;
+    }
     try {
-      const payload = this.jwtService.verify(refreshToken, {
+      const raw: unknown = this.jwtService.verify(refreshToken, {
         secret: JWT_SECRET,
       });
+      const payload = raw as RefreshPayload;
       if (payload.type !== 'refresh') throw new Error('Not a refresh token');
 
       const user = usersStore.find((u) => u.id === payload.sub && u.activo);

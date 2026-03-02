@@ -1,166 +1,96 @@
-# 📁 Estructura del Proyecto — `campusback`
-
-Backend NestJS del sistema RDAM. Todos los archivos fuente viven bajo `src/`.
-
----
-
-## Raíz de `src/`
-
-| Archivo             | Descripción                                                                                                           |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `main.ts`           | Punto de entrada. Levanta la app NestJS, configura prefijo global `/api`, pipes de validación y filtros de excepción. |
-| `app.module.ts`     | Módulo raíz. Importa y conecta todos los módulos de la aplicación.                                                    |
-| `app.controller.ts` | Controlador raíz (health-check básico).                                                                               |
-| `app.service.ts`    | Servicio raíz mínimo.                                                                                                 |
-
----
-
-## 📂 `auth/` — Autenticación
-
-Gestiona login, generación y validación de JWT.
-
-| Archivo                      | Descripción                                                      |
-| ---------------------------- | ---------------------------------------------------------------- |
-| `auth.module.ts`             | Registra el módulo, importa JwtModule y PassportModule.          |
-| `auth.controller.ts`         | Expone `POST /auth/login` y `POST /auth/refresh`.                |
-| `auth.service.ts`            | Valida credenciales, firma tokens JWT, maneja refresh tokens.    |
-| `dto/login.dto.ts`           | DTO para el body del login (email, password).                    |
-| `dto/refresh.dto.ts`         | DTO para el body del refresh token.                              |
-| `strategies/jwt.strategy.ts` | Estrategia Passport que valida el JWT en cada request protegido. |
-
----
-
-## 📂 `usuarios/` — Gestión de Usuarios
-
-CRUD de usuarios internos del sistema (operadores, administradores).
-
-| Archivo                     | Descripción                                                            |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `usuarios.module.ts`        | Registra el módulo y sus dependencias.                                 |
-| `usuarios.controller.ts`    | Endpoints para crear, listar, obtener, actualizar y eliminar usuarios. |
-| `usuarios.service.ts`       | Lógica de negocio: almacén en memoria, hash de contraseñas, búsqueda.  |
-| `dto/create-usuario.dto.ts` | DTO para creación de usuarios.                                         |
-| `dto/update-usuario.dto.ts` | DTO para actualización parcial de usuarios.                            |
-
----
-
-## 📂 `expedientes/` — Expedientes Judiciales
-
-Módulo central. Maneja el ciclo de vida completo de un expediente.
-
-| Archivo                        | Descripción                                                                                         |
-| ------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `expedientes.module.ts`        | Registra el módulo con MulterModule para uploads de archivos.                                       |
-| `expedientes.controller.ts`    | Endpoints: crear, listar, obtener, actualizar, aprobar, rechazar, cargar documentos, validar pagos. |
-| `expedientes.service.ts`       | Lógica completa: estados, historial, documentos adjuntos, pagos asociados.                          |
-| `dto/create-expediente.dto.ts` | DTO para alta de expediente (cliente, monto, juzgado, etc.).                                        |
-| `dto/update-expediente.dto.ts` | DTO para actualización parcial del expediente.                                                      |
-
----
-
-## 📂 `pagos/` — Pagos
-
-Registro y seguimiento de pagos vinculados a expedientes.
-
-| Archivo                  | Descripción                                                               |
-| ------------------------ | ------------------------------------------------------------------------- |
-| `pagos.module.ts`        | Registra el módulo.                                                       |
-| `pagos.controller.ts`    | Endpoints para registrar y listar pagos.                                  |
-| `pagos.service.ts`       | Lógica de negocio: creación de pagos, vinculación a expedientes, estados. |
-| `dto/create-pago.dto.ts` | DTO para registrar un nuevo pago.                                         |
-| `dto/update-pago.dto.ts` | DTO para actualizar el estado de un pago.                                 |
-
----
-
-## 📂 `certificados/` — Certificados
-
-Generación y descarga de certificados en PDF para los expedientes.
-
-| Archivo                           | Descripción                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `certificados.module.ts`          | Registra el módulo.                                               |
-| `certificados.controller.ts`      | Endpoints para generar y obtener certificados de un expediente.   |
-| `certificados.service.ts`         | Lógica: genera el certificado, lo almacena y devuelve el recurso. |
-| `dto/generate-certificado.dto.ts` | DTO para la solicitud de generación de certificado.               |
-
----
-
-## 📂 `dashboard/` — Dashboard
-
-Estadísticas y métricas globales del sistema para el panel de administración.
-
-| Archivo                   | Descripción                                                      |
-| ------------------------- | ---------------------------------------------------------------- |
-| `dashboard.module.ts`     | Registra el módulo e importa los servicios necesarios.           |
-| `dashboard.controller.ts` | Expone `GET /dashboard/stats` con métricas generales.            |
-| `dashboard.service.ts`    | Calcula totales: expedientes por estado, pagos, montos, alertas. |
-
----
-
-## 📂 `auditoria/` — Auditoría
-
-Log de todas las acciones relevantes realizadas en el sistema.
-
-| Archivo                   | Descripción                                                    |
-| ------------------------- | -------------------------------------------------------------- |
-| `auditoria.module.ts`     | Registra el módulo.                                            |
-| `auditoria.controller.ts` | Endpoint para consultar el log de auditoría con filtros.       |
-| `auditoria.service.ts`    | Almacena y consulta eventos de auditoría (quién, qué, cuándo). |
-
----
-
-## 📂 `webhooks/` — Webhooks
-
-Recepción de notificaciones externas (ej: confirmación de pagos de pasarelas).
-
-| Archivo                  | Descripción                                                                |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `webhooks.module.ts`     | Registra el módulo.                                                        |
-| `webhooks.controller.ts` | Endpoint público `POST /webhooks/pagos` para recibir eventos externos.     |
-| `webhooks.service.ts`    | Procesa el evento recibido y actualiza el estado del pago correspondiente. |
-
----
-
-## 📂 `common/` — Utilidades Compartidas
-
-Código transversal reutilizado por todos los módulos.
-
-### `common/guards/`
-
-| Archivo             | Descripción                                                              |
-| ------------------- | ------------------------------------------------------------------------ |
-| `jwt-auth.guard.ts` | Guard que protege rutas verificando el token JWT.                        |
-| `roles.guard.ts`    | Guard que verifica que el usuario tenga el rol requerido (vía `@Roles`). |
-
-### `common/decorators/`
-
-| Archivo                     | Descripción                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------ |
-| `roles.decorator.ts`        | Decorador `@Roles('Admin', 'Operador')` para marcar el rol requerido en un endpoint. |
-| `current-user.decorator.ts` | Decorador `@CurrentUser()` para inyectar el usuario autenticado en el handler.       |
-
-### `common/filters/`
-
-| Archivo                    | Descripción                                                            |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `http-exception.filter.ts` | Filtro global que da formato uniforme a todas las respuestas de error. |
-
-### `common/`
-
-| Archivo              | Descripción                                                                              |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| `response.helper.ts` | Helper `successResponse(data)` para envolver respuestas exitosas en un formato estándar. |
-
----
-
-## Patrón general de cada módulo
-
-Cada módulo funcional sigue el mismo patrón de tres archivos:
+# 🗂️ Estructura del proyecto — RDAM Backend
 
 ```
-modulo/
-├── modulo.module.ts      ← Declaración del módulo NestJS
-├── modulo.controller.ts  ← Define las rutas HTTP y sus decoradores
-├── modulo.service.ts     ← Contiene la lógica de negocio
-└── dto/                  ← Objetos de transferencia de datos (validación de entrada)
+campusback/
+├── src/
+│   ├── main.ts                          # Bootstrap, prefijo /v1, CORS
+│   ├── app.module.ts                    # Módulo raíz
+│   ├── app.controller.ts
+│   ├── app.service.ts
+│   │
+│   ├── auth/                            # Autenticación JWT
+│   │   ├── auth.module.ts
+│   │   ├── auth.controller.ts           # POST /login, /refresh, /logout — GET /me
+│   │   ├── auth.service.ts              # login(), refresh(), logout(), getMe()
+│   │   ├── dto/
+│   │   │   ├── login.dto.ts
+│   │   │   └── refresh.dto.ts
+│   │   └── strategies/
+│   │       └── jwt.strategy.ts          # Estrategia Passport JWT
+│   │
+│   ├── usuarios/                        # CRUD de usuarios (solo Administrador)
+│   │   ├── usuarios.module.ts
+│   │   ├── usuarios.controller.ts       # CRUD + cambio de contraseña
+│   │   ├── usuarios.service.ts
+│   │   └── dto/
+│   │       ├── create-usuario.dto.ts
+│   │       └── update-usuario.dto.ts
+│   │
+│   ├── expedientes/                     # Módulo principal de negocio
+│   │   ├── expedientes.module.ts
+│   │   ├── expedientes.controller.ts    # CRUD + aprobar/rechazar + documentos + certificado
+│   │   ├── expedientes.service.ts       # Lógica de estados, documentos, PDF certificado
+│   │   └── dto/
+│   │       ├── create-expediente.dto.ts
+│   │       └── update-expediente.dto.ts
+│   │
+│   ├── pagos/                           # Pagos y órdenes
+│   │   ├── pagos.module.ts
+│   │   ├── pagos.controller.ts          # POST /crear-orden, /registrar-manual — GET /expediente/:id
+│   │   ├── pagos.service.ts
+│   │   └── dto/
+│   │       └── create-pago.dto.ts
+│   │
+│   ├── certificados/                    # Generación y validación de certificados
+│   │   ├── certificados.module.ts
+│   │   ├── certificados.controller.ts   # POST /generar — GET /validar/:num — GET /:id/descargar
+│   │   └── certificados.service.ts
+│   │
+│   ├── dashboard/                       # Estadísticas y KPIs
+│   │   ├── dashboard.module.ts
+│   │   ├── dashboard.controller.ts      # GET /stats
+│   │   └── dashboard.service.ts
+│   │
+│   ├── auditoria/                       # Log de eventos
+│   │   ├── auditoria.module.ts
+│   │   ├── auditoria.controller.ts      # GET /auditoria
+│   │   └── auditoria.service.ts         # registrar(), getLogs()
+│   │
+│   ├── webhooks/                        # Notificaciones externas de pago
+│   │   ├── webhooks.module.ts
+│   │   ├── webhooks.controller.ts       # POST /webhooks/pagos
+│   │   └── webhooks.service.ts
+│   │
+│   └── common/                          # Utilidades compartidas
+│       ├── interfaces/
+│       │   └── jwt-payload.interface.ts # Tipo JwtPayload (id, nombre, email, rol)
+│       ├── guards/
+│       │   ├── jwt-auth.guard.ts        # Verifica token JWT
+│       │   └── roles.guard.ts           # Verifica rol del usuario
+│       ├── decorators/
+│       │   ├── current-user.decorator.ts # @CurrentUser() → JwtPayload
+│       │   └── roles.decorator.ts        # @Roles('Administrador', ...)
+│       └── response.helper.ts            # successResponse()
+│
+├── API-CONTRACT.md                      # Contrato completo de la API (28 endpoints)
+├── POSTMAN-GUIA.md                      # Guía paso a paso para testing con Postman
+├── ESTRUCTURA.md                        # Este archivo
+├── README.md                            # Descripción general y setup
+├── package.json
+├── tsconfig.json
+└── nest-cli.json
 ```
+
+---
+
+## Almacenes en memoria (stores)
+
+| Store              | Archivo                                | Descripción            |
+| ------------------ | -------------------------------------- | ---------------------- |
+| `usersStore`       | `auth/auth.service.ts`                 | Usuarios con seed data |
+| `expedientesStore` | `expedientes/expedientes.service.ts`   | Expedientes activos    |
+| `auditoriaStore`   | `auditoria/auditoria.service.ts`       | Log de eventos         |
+| Pagos              | `pagos/pagos.service.ts`               | Pagos y órdenes        |
+| Certificados       | `certificados/certificados.service.ts` | Certificados generados |
+
+> ⚠️ Todos los datos se pierden al reiniciar el servidor (excepto el seed de usuarios).

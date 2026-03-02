@@ -7,7 +7,7 @@ export interface LogEntry {
   accion: string;
   entidad: string;
   entidadId: string;
-  detalles: Record<string, any>;
+  detalles: Record<string, unknown>;
   ipAddress: string;
   userAgent: string;
   fecha: string;
@@ -51,7 +51,9 @@ export class AuditoriaService {
     if (query.fechaHasta)
       list = list.filter((l) => l.fecha <= query.fechaHasta!);
 
-    list.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    list.sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+    );
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
