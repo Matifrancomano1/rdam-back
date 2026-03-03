@@ -1,25 +1,43 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
-import { createHmac } from 'crypto';
+import { Injectable } from '@nestjs/common';
 import { PagosService } from '../pagos/pagos.service';
 
-const WEBHOOK_SECRET = 'rdam-webhook-secret-2026';
+/**
+ * Payload que envía PlusPagos Mock al webhook del backend.
+ * Generado en pluspagos-mock-simple/server.js → función sendWebhook()
+ */
+interface PlusPagosWebhookPayload {
+  Tipo: string;
+  TransaccionPlataformaId: string; // ID interno de la pasarela
+  TransaccionComercioId: string; // Nuestra referenciaExterna (TXN-XXXX-XXXXXX)
+  Monto: string;
+  EstadoId: string; // "3" = REALIZADA, "4" = RECHAZADA
+  Estado: string; // "REALIZADA" | "RECHAZADA"
+  FechaProcesamiento: string;
+}
 
 @Injectable()
 export class WebhooksService {
   constructor(private readonly pagosService: PagosService) {}
 
-  async procesarPagoConfirmado(body: any, signature: string) {
-    // Validate HMAC signature
-    const expectedSig = createHmac('sha256', WEBHOOK_SECRET)
-      .update(JSON.stringify(body))
-      .digest('hex');
-
-    if (signature && signature !== `sha256=${expectedSig}`) {
-      throw new ForbiddenException('SIGNATURE_INVALID');
+  procesarPagoConfirmado(body: PlusPagosWebhookPayload) {
+    // EstadoId "3" = REALIZADA (aprobada)
+    if (body.EstadoId === '3') {
+      this.pagosService.confirmarPagoPasarela(body.TransaccionComercioId, {
+        transaccionPlataformaId: body.TransaccionPlataformaId,
+        estadoId: body.EstadoId,
+        estadoTexto: body.Estado,
+        fechaProcesamiento: body.FechaProcesamiento,
+      });
     }
+  }
 
-    if (body.status === 'approved') {
-      this.pagosService.confirmarPagoPasarela(body.paymentId, body);
-    }
+  procesarPagoRechazado(body: PlusPagosWebhookPayload) {
+    // EstadoId "4" = RECHAZADA o por CallbackCancel
+    this.pagosService.rechazarPagoPasarela(body.TransaccionComercioId, {
+      transaccionPlataformaId: body.TransaccionPlataformaId,
+      estadoId: body.EstadoId,
+      estadoTexto: body.Estado,
+      fechaProcesamiento: body.FechaProcesamiento,
+    });
   }
 }
