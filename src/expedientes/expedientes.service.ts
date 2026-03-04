@@ -38,6 +38,7 @@ export interface DocumentoExpediente {
   url: string;
   subidoPor: string;
   fechaSubida: string;
+  buffer?: Buffer; // In-memory for download
 }
 
 export interface CertificadoPdf {
@@ -332,17 +333,34 @@ export class ExpedientesService {
     const exp = expedientesStore.find((e) => e.id === id);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
 
+    const docId = uuidv4();
     const doc: DocumentoExpediente = {
-      id: uuidv4(),
+      id: docId,
       nombreArchivo: file.originalname,
       tipoMime: file.mimetype,
       tamanioBytes: file.size,
-      url: `/documentos/${uuidv4()}/descargar`,
+      url: `/expedientes/${id}/documentos/${docId}/descargar`,
       subidoPor: userId,
       fechaSubida: new Date().toISOString(),
+      buffer: file.buffer,
     };
     exp.documentos.push(doc);
     return doc;
+  }
+
+  getDocumentoBuffer(
+    expedienteId: string,
+    docId: string,
+  ): { buffer: Buffer; tipoMime: string; nombreArchivo: string } | null {
+    const exp = expedientesStore.find((e) => e.id === expedienteId);
+    if (!exp) return null;
+    const doc = exp.documentos.find((d) => d.id === docId);
+    if (!doc || !doc.buffer) return null;
+    return {
+      buffer: doc.buffer,
+      tipoMime: doc.tipoMime,
+      nombreArchivo: doc.nombreArchivo,
+    };
   }
 
   getDocumentos(id: string) {

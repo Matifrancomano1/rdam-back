@@ -13,9 +13,12 @@ import {
   HttpCode,
   HttpStatus,
   Res,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ExpedientesService } from './expedientes.service';
 import { CreateExpedienteDto } from './dto/create-expediente.dto';
 import { UpdateExpedienteDto } from './dto/update-expediente.dto';
@@ -26,6 +29,17 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { successResponse } from '../common/response.helper';
 import { IsString, IsOptional } from 'class-validator';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
+
+const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function validateUploadedFile(file: Express.Multer.File): void {
+  if (!file) throw new BadRequestException('MISSING_FILE: Se requiere un archivo');
+  if (!ALLOWED_MIME_TYPES.includes(file.mimetype))
+    throw new BadRequestException(`INVALID_FILE_TYPE: Solo se aceptan PDF, JPG o PNG. Recibido: ${file.mimetype}`);
+  if (file.size > MAX_FILE_SIZE)
+    throw new BadRequestException(`FILE_TOO_LARGE: El tamaño máximo es 10 MB. Recibido: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+}
 
 class ActionDto {
   @IsString() @IsOptional() observaciones?: string;
@@ -119,13 +133,14 @@ export class ExpedientesController {
 
   @Post(':id/documentos')
   @Roles('Operador', 'Administrador')
-  @UseInterceptors(FileInterceptor('archivo'))
+  @UseInterceptors(FileInterceptor('archivo', { storage: memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } }))
   @HttpCode(HttpStatus.CREATED)
   uploadDocumento(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
+    validateUploadedFile(file);
     const data = this.expedientesService.addDocumento(id, file, user.id);
     return successResponse({ ...data, expedienteId: id });
   }
@@ -133,6 +148,27 @@ export class ExpedientesController {
   @Get(':id/documentos')
   getDocumentos(@Param('id') id: string) {
     return successResponse(this.expedientesService.getDocumentos(id));
+  }
+
+  /**
+   * GET /v1/expedientes/:id/documentos/:docId/descargar
+   * Endpoint PÚBLICO — permite al ciudadano descargar/ver un documento
+   */
+  @Get(':id/documentos/:docId/descargar')
+  @HttpCode(HttpStatus.OK)
+  descargarDocumento(
+    @Param('id') id: string,
+    @Param('docId') docId: string,
+    @Res() res: Response,
+  ) {
+    const result = this.expedientesService.getDocumentoBuffer(id, docId);
+    if (!result) throw new NotFoundException('Documento no encontrado');
+    res.set({
+      'Content-Type': result.tipoMime,
+      'Content-Disposition': `inline; filename="${encodeURIComponent(result.nombreArchivo)}"`,
+      'Cache-Control': 'no-store',
+    });
+    res.send(result.buffer);
   }
 
   @Get(':id/pagos')
@@ -161,13 +197,16 @@ export class ExpedientesController {
 
   @Post(':id/certificado')
   @Roles('Operador', 'Administrador')
-  @UseInterceptors(FileInterceptor('archivo'))
+  @UseInterceptors(FileInterceptor('archivo', { storage: memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } }))
   @HttpCode(HttpStatus.CREATED)
   subirCertificado(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
+    if (!file) throw new BadRequestException('MISSING_FILE: Se requiere un archivo PDF');
+    if (file.mimetype !== 'application/pdf')
+      throw new BadRequestException('INVALID_FILE_TYPE: Solo se aceptan archivos PDF para certificados');
     return successResponse(
       this.expedientesService.subirCertificadoPdf(id, file, user),
     );

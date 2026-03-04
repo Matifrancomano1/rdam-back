@@ -139,6 +139,10 @@ export class PagosService {
     return pago;
   }
 
+  getPagoByReferencia(referencia: string): Pago | undefined {
+    return pagosStore.find((p) => p.referenciaExterna === referencia);
+  }
+
   // Called from webhook — pago aprobado
   confirmarPagoPasarela(
     referenciaExterna: string,
