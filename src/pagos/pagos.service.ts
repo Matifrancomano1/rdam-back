@@ -4,6 +4,7 @@ import { expedientesStore } from '../expedientes/expedientes.service';
 import { CrearOrdenDto } from './dto/crear-orden.dto';
 import { encryptString } from '../common/utils/crypto.util';
 import { PLUSPAGOS_CONFIG } from '../common/utils/config.util';
+import { PagosEventosService } from './pagos-eventos.service';
 
 export interface Pago {
   id: string;
@@ -36,6 +37,8 @@ export const pagosStore: Pago[] = [];
 
 @Injectable()
 export class PagosService {
+  constructor(private readonly eventosService: PagosEventosService) {}
+
   crearOrden(dto: CrearOrdenDto): any {
     const exp = expedientesStore.find((e) => e.id === dto.expedienteId);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
@@ -64,8 +67,8 @@ export class PagosService {
     );
 
     // URL base del backend para armar los callbacks
-    // IMPORTANTE: NO incluir el prefijo /v1/ — NestJS lo agrega automáticamente vía setGlobalPrefix
-    const backendBase = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const backendBase =
+      process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
 
     const urlSuccessEncrypted = encryptString(
       `${backendBase}/success-page`,
@@ -76,7 +79,6 @@ export class PagosService {
       PLUSPAGOS_CONFIG.SECRET_KEY,
     );
 
-    // Las URLs de callback NO deben llevar /v1/ porque NestJS ya aplica el prefijo global
     const callbackSuccessEncrypted = encryptString(
       `${backendBase}/v1/webhooks/pago-confirmado`,
       PLUSPAGOS_CONFIG.SECRET_KEY,
@@ -186,6 +188,24 @@ export class PagosService {
       exp.estado.fechaActualizacion = now;
       exp.pagos.push(pago.id);
     }
+
+    // Notificar al frontend vía SSE
+    this.eventosService.emit(referenciaExterna, {
+      tipo: 'PAGO_CONFIRMADO',
+      referencia: referenciaExterna,
+      estadoPago: 'confirmado',
+      estadoExpediente: exp?.estado.actual ?? null,
+      monto: pago.monto,
+      datosPasarela: pago.datosPasarela
+        ? {
+            ultimosCuatroDigitos: pago.datosPasarela.ultimosCuatroDigitos,
+            marca: pago.datosPasarela.marca,
+          }
+        : null,
+      fechaProcesamiento: datos.fechaProcesamiento,
+    });
+    // Cerrar el stream SSE 1s después de emitir
+    setTimeout(() => this.eventosService.complete(referenciaExterna), 1000);
   }
 
   // Called from webhook — pago rechazado o cancelado
@@ -212,5 +232,17 @@ export class PagosService {
       transaccionPlataformaId: datos.transaccionPlataformaId,
       fechaProcesamiento: datos.fechaProcesamiento,
     };
+
+    // Notificar al frontend vía SSE
+    this.eventosService.emit(referenciaExterna, {
+      tipo: 'PAGO_RECHAZADO',
+      referencia: referenciaExterna,
+      estadoPago: 'rechazado',
+      estadoExpediente: null,
+      monto: pago.monto,
+      datosPasarela: null,
+      fechaProcesamiento: datos.fechaProcesamiento,
+    });
+    setTimeout(() => this.eventosService.complete(referenciaExterna), 1000);
   }
 }

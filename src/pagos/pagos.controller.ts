@@ -9,8 +9,11 @@ import {
   HttpStatus,
   BadRequestException,
   NotFoundException,
+  Sse,
 } from '@nestjs/common';
+import { Observable } from 'rxjs';
 import { PagosService, Pago } from './pagos.service';
+import { PagosEventosService } from './pagos-eventos.service';
 import { CrearOrdenDto } from './dto/crear-orden.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -28,7 +31,10 @@ class CrearOrdenPublicaDto {
 
 @Controller('pagos')
 export class PagosController {
-  constructor(private readonly pagosService: PagosService) {}
+  constructor(
+    private readonly pagosService: PagosService,
+    private readonly eventosService: PagosEventosService,
+  ) {}
 
   /**
    * POST /v1/pagos/crear-orden  (protegido — operadores)
@@ -75,8 +81,25 @@ export class PagosController {
   }
 
   /**
+   * GET /v1/pagos/eventos/:referencia  (PÚBLICO — SSE)
+   * El frontend se conecta aquí y espera el evento de confirmación/rechazo del pago.
+   * Cuando PlusPagos llama al webhook, este stream recibe el evento en tiempo real.
+   *
+   * Uso desde el frontend:
+   *   const source = new EventSource('/v1/pagos/eventos/TXN-2026-XXXXXX');
+   *   source.onmessage = (e) => { const data = JSON.parse(e.data); ... };
+   */
+  @Sse('eventos/:referencia')
+  @HttpCode(HttpStatus.OK)
+  streamEventosPago(
+    @Param('referencia') referencia: string,
+  ): Observable<MessageEvent> {
+    return this.eventosService.subscribe(referencia);
+  }
+
+  /**
    * GET /v1/pagos/estado-por-referencia/:referencia  (PÚBLICO)
-   * El frontend llama esto cuando el usuario regresa de la pasarela.
+   * El frontend llama esto cuando el usuario regresa de la pasarela (polling fallback).
    */
   @Get('estado-por-referencia/:referencia')
   @HttpCode(HttpStatus.OK)

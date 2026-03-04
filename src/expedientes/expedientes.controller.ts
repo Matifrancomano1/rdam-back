@@ -16,6 +16,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+
 import { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -87,6 +88,21 @@ export class ExpedientesController {
       sortOrder,
     });
     return successResponse(data);
+  }
+
+  @Get('publico/buscar')
+  @HttpCode(HttpStatus.OK)
+  buscarPorDniEmail(
+    @Query('dni') dni: string,
+    @Query('email') email: string,
+  ) {
+    if (!dni || !email)
+      throw new BadRequestException(
+        'Se requieren los parámetros "dni" y "email"',
+      );
+    return successResponse(
+      this.expedientesService.buscarPorDniEmail(dni.trim(), email.trim()),
+    );
   }
 
   @Get(':id')

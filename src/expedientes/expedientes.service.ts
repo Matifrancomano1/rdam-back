@@ -225,6 +225,51 @@ export class ExpedientesService {
     return this.toResponse(exp);
   }
 
+  /**
+   * Búsqueda pública por DNI + email (sin autenticación).
+   * Usado por el portal ciudadano para encontrar su expediente.
+   * Valida que tanto el DNI como el email coincidan exactamente (case-insensitive para email).
+   */
+  buscarPorDniEmail(dni: string, email: string) {
+    const exp = expedientesStore.find(
+      (e) =>
+        e.metadata.activo &&
+        e.deudor.numeroIdentificacion === dni &&
+        e.deudor.email.toLowerCase() === email.toLowerCase(),
+    );
+
+    if (!exp)
+      throw new NotFoundException(
+        'No se encontró un expediente activo con esos datos. Verificá el DNI y el email registrado.',
+      );
+
+    // Vista pública: no expone datos internos del operador ni metadata interna
+    return {
+      id: exp.id,
+      numeroExpediente: exp.numeroExpediente,
+      deudor: {
+        nombreCompleto: exp.deudor.nombreCompleto,
+        tipoIdentificacion: exp.deudor.tipoIdentificacion,
+        numeroIdentificacion: exp.deudor.numeroIdentificacion,
+        email: exp.deudor.email,
+      },
+      deuda: {
+        montoAdeudado: exp.deuda.montoAdeudado,
+        periodoDeuda: exp.deuda.periodoDeuda,
+        beneficiario: exp.deuda.beneficiario,
+      },
+      estado: exp.estado,
+      documentos: exp.documentos.map((d) => ({
+        id: d.id,
+        nombreArchivo: d.nombreArchivo,
+        tipoMime: d.tipoMime,
+        url: d.url,
+        fechaSubida: d.fechaSubida,
+      })),
+      tieneCertificado: !!exp.certificadoPdf,
+    };
+  }
+
   update(id: string, dto: UpdateExpedienteDto) {
     const exp = expedientesStore.find((e) => e.id === id);
     if (!exp) throw new NotFoundException('Expediente no encontrado');
