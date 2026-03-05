@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Body,
+  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -12,6 +13,8 @@ import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
+import { RegisterDto } from './dto/register.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { successResponse } from '../common/response.helper';
@@ -20,6 +23,13 @@ import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() dto: RegisterDto) {
+    const data = await this.authService.register(dto);
+    return successResponse(data);
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -53,6 +63,18 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   getMe(@CurrentUser() user: JwtPayload) {
     const data = this.authService.getMe(user.id);
+    return successResponse(data);
+  }
+
+  @Get('verify')
+  async verify(@Query('token') token: string) {
+    const data = await this.authService.verifyEmail(token);
+    return successResponse(data);
+  }
+
+  @Post('resend-verification')
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    const data = await this.authService.resendVerification(dto.email);
     return successResponse(data);
   }
 }

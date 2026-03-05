@@ -8,6 +8,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { CertificadosModule } from './certificados/certificados.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     DashboardModule,
     CertificadosModule,
     AuditoriaModule,
+    MailModule,
     WebhooksModule,
   ],
 })

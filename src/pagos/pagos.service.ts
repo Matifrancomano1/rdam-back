@@ -66,19 +66,25 @@ export class PagosService {
       PLUSPAGOS_CONFIG.SECRET_KEY,
     );
 
-    // URL base del backend para armar los callbacks
+    // URL base del backend para armar los callbacks (webhook al backend)
     const backendBase =
       process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3000}`;
 
+    // URL base del frontend para redirigir al ciudadano después del pago
+    const frontendBase = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    // UrlSuccess / UrlError: redirigen el NAVEGADOR del ciudadano al frontend
+    // El frontend detecta ?estado=aprobado|rechazado&referencia=TXN-... en detectRetornoPasarela()
     const urlSuccessEncrypted = encryptString(
-      `${backendBase}/success-page`,
+      `${frontendBase}/?estado=aprobado&referencia=${referenciaExterna}`,
       PLUSPAGOS_CONFIG.SECRET_KEY,
     );
     const urlErrorEncrypted = encryptString(
-      `${backendBase}/error-page`,
+      `${frontendBase}/?estado=rechazado&referencia=${referenciaExterna}`,
       PLUSPAGOS_CONFIG.SECRET_KEY,
     );
 
+    // CallbackSuccess / CallbackCancel: notifican al BACKEND (webhook server-to-server)
     const callbackSuccessEncrypted = encryptString(
       `${backendBase}/v1/webhooks/pago-confirmado`,
       PLUSPAGOS_CONFIG.SECRET_KEY,

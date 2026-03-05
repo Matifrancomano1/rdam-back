@@ -2,10 +2,16 @@ import {
   Injectable,
   UnauthorizedException,
   NotFoundException,
+  BadRequestException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { JWT_SECRET } from './strategies/jwt.strategy';
+import { v4 as uuidv4 } from 'uuid';
+import { MailService } from '../mail';
+import { RegisterDto } from './dto/register.dto';
 
 export interface StoredUser {
   id: string;
@@ -19,6 +25,14 @@ export interface StoredUser {
   activo: boolean;
   fechaCreacion: string;
   ultimoAcceso?: string;
+  /** Email verification status */
+  isVerified: boolean;
+  /** Token sent to user for email confirmation */
+  verificationToken?: string;
+  /** When the token expires */
+  verificationTokenExpires?: Date;
+  /** Timestamp when last verification email was sent */
+  lastVerificationEmailSent?: Date;
 }
 
 // In-memory user store with seed data
@@ -35,6 +49,10 @@ export const usersStore: StoredUser[] = [
     activo: true,
     fechaCreacion: '2025-01-01T00:00:00Z',
     ultimoAcceso: undefined,
+    isVerified: true,
+    verificationToken: undefined,
+    verificationTokenExpires: undefined,
+    lastVerificationEmailSent: undefined,
   },
   {
     id: 'uuid-user-002',
@@ -48,6 +66,10 @@ export const usersStore: StoredUser[] = [
     activo: true,
     fechaCreacion: '2025-01-15T08:00:00Z',
     ultimoAcceso: undefined,
+    isVerified: true,
+    verificationToken: undefined,
+    verificationTokenExpires: undefined,
+    lastVerificationEmailSent: undefined,
   },
   {
     id: 'uuid-user-003',
@@ -61,6 +83,10 @@ export const usersStore: StoredUser[] = [
     activo: true,
     fechaCreacion: '2026-01-01T00:00:00Z',
     ultimoAcceso: undefined,
+    isVerified: true,
+    verificationToken: undefined,
+    verificationTokenExpires: undefined,
+    lastVerificationEmailSent: undefined,
   },
 ];
 
@@ -69,11 +95,20 @@ const revokedTokens = new Set<string>();
 
 @Injectable()
 export class AuthService {
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    // mail service injected for sending verification messages
+    private readonly mailService: MailService,
+  ) {}
 
   async login(username: string, password: string) {
     const user = usersStore.find((u) => u.username === username && u.activo);
     if (!user) throw new UnauthorizedException('INVALID_CREDENTIALS');
+
+    if (!user.isVerified) {
+      // user must verify email before logging in
+      throw new UnauthorizedException('EMAIL_NOT_VERIFIED');
+    }
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('INVALID_CREDENTIALS');
@@ -115,6 +150,7 @@ export class AuthService {
   }
 
   refresh(refreshToken: string) {
+    // refresh should also check that user is still verified
     interface RefreshPayload {
       sub: string;
       type: string;
@@ -128,6 +164,7 @@ export class AuthService {
 
       const user = usersStore.find((u) => u.id === payload.sub && u.activo);
       if (!user) throw new UnauthorizedException('User not found');
+      if (!user.isVerified) throw new UnauthorizedException('EMAIL_NOT_VERIFIED');
 
       const newPayload = {
         sub: user.id,
@@ -148,6 +185,94 @@ export class AuthService {
     revokedTokens.add(token);
   }
 
+  /**
+   * Registration flow: hashes password, creates user record,
+   * generates verification token and sends email.
+   */
+  async register(data: RegisterDto) {
+    // simple uniqueness checks
+    if (usersStore.find((u) => u.username === data.username)) {
+      throw new UnauthorizedException('USERNAME_TAKEN');
+    }
+    if (usersStore.find((u) => u.email === data.email)) {
+      throw new UnauthorizedException('EMAIL_TAKEN');
+    }
+
+    const passwordHash = await bcrypt.hash(data.password, 10);
+    const token = uuidv4();
+    const now = new Date();
+    const expires = new Date(now.getTime() + 24 * 60 * 60 * 1000); // 24h
+    const user: StoredUser = {
+      id: uuidv4(),
+      username: data.username,
+      nombre: data.nombre,
+      email: data.email,
+      telefono: data.telefono,
+      passwordHash,
+      rol: data.rol || 'Ciudadano',
+      departamento: data.departamento || 'Externo',
+      activo: true,
+      fechaCreacion: now.toISOString(),
+      ultimoAcceso: undefined,
+      isVerified: false,
+      verificationToken: token,
+      verificationTokenExpires: expires,
+      lastVerificationEmailSent: now,
+    };
+    usersStore.push(user);
+
+    // send verification email
+    await this.mailService.sendVerificationEmail(user.email, token);
+    return { message: 'User created. Verification email sent.' };
+  }
+
+  /** Process token from link and mark user verified */
+  async verifyEmail(token: string) {
+    const user = usersStore.find((u) => u.verificationToken === token);
+    if (!user) throw new NotFoundException('TOKEN_INVALID');
+    if (user.isVerified) {
+      return { message: 'Already verified' };
+    }
+    if (
+      !user.verificationTokenExpires ||
+      user.verificationTokenExpires < new Date()
+    ) {
+      throw new BadRequestException('TOKEN_EXPIRED');
+    }
+    user.isVerified = true;
+    user.verificationToken = undefined;
+    user.verificationTokenExpires = undefined;
+    user.lastVerificationEmailSent = undefined;
+    return { message: 'User successfully verified' };
+  }
+
+
+  /**
+   * Resend verification email if user exists and isn't verified.
+   * Enforces 5‑minute cooldown.
+   */
+  async resendVerification(email: string) {
+    const user = usersStore.find((u) => u.email === email);
+    if (!user) throw new NotFoundException('USER_NOT_FOUND');
+    if (user.isVerified) {
+      throw new BadRequestException('ALREADY_VERIFIED');
+    }
+    const now = new Date();
+    if (
+      user.lastVerificationEmailSent &&
+      now.getTime() - user.lastVerificationEmailSent.getTime() < 5 * 60 * 1000
+    ) {
+      throw new HttpException('WAIT_BEFORE_RETRY', HttpStatus.TOO_MANY_REQUESTS);
+    }
+    // issue new token and expiration
+    const token = uuidv4();
+    user.verificationToken = token;
+    user.verificationTokenExpires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    user.lastVerificationEmailSent = now;
+    await this.mailService.sendVerificationEmail(user.email, token);
+    return { message: 'Verification email resent' };
+  }
+
   getMe(userId: string) {
     const user = usersStore.find((u) => u.id === userId);
     if (!user) throw new NotFoundException('Usuario no encontrado');
@@ -160,6 +285,7 @@ export class AuthService {
       rol: user.rol,
       departamento: user.departamento,
       activo: user.activo,
+      isVerified: user.isVerified,
       fechaCreacion: user.fechaCreacion,
       ultimoAcceso: user.ultimoAcceso,
     };
