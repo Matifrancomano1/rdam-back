@@ -71,6 +71,10 @@ export class UsuariosService {
       departamento: dto.departamento,
       activo: dto.activo ?? true,
       fechaCreacion: new Date().toISOString(),
+      isVerified: true,
+      verificationToken: undefined,
+      verificationTokenExpires: undefined,
+      lastVerificationEmailSent: undefined,
     };
     usersStore.push(user);
     return this.toPublic(user);
