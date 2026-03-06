@@ -27,6 +27,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { successResponse } from '../common/response.helper';
 import { IsString, IsOptional } from 'class-validator';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
@@ -91,6 +92,7 @@ export class ExpedientesController {
   }
 
   @Get('publico/buscar')
+  @Public()
   @HttpCode(HttpStatus.OK)
   buscarPorDniEmail(
     @Query('dni') dni: string,
@@ -98,7 +100,7 @@ export class ExpedientesController {
   ) {
     if (!dni || !email)
       throw new BadRequestException(
-        'Se requieren los parámetros "dni" y "email"',
+        'Se requieren los parámetros "dni" y "email" para la búsqueda pública',
       );
     return successResponse(
       this.expedientesService.buscarPorDniEmail(dni.trim(), email.trim()),
@@ -171,6 +173,7 @@ export class ExpedientesController {
    * Endpoint PÚBLICO — permite al ciudadano descargar/ver un documento
    */
   @Get(':id/documentos/:docId/descargar')
+  @Public()
   @HttpCode(HttpStatus.OK)
   descargarDocumento(
     @Param('id') id: string,

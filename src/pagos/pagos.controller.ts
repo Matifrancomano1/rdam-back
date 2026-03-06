@@ -18,6 +18,7 @@ import { CrearOrdenDto } from './dto/crear-orden.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { successResponse } from '../common/response.helper';
 import { expedientesStore } from '../expedientes/expedientes.service';
 import { IsString, IsNumber, IsOptional, IsEmail, Min } from 'class-validator';
@@ -52,6 +53,7 @@ export class PagosController {
    * Valida que el expediente exista y esté en estado "Aprobado - Pendiente de Pago".
    */
   @Post('crear-orden-publica')
+  @Public()
   @HttpCode(HttpStatus.OK)
   crearOrdenPublica(@Body() dto: CrearOrdenPublicaDto) {
     const exp = expedientesStore.find((e) => e.id === dto.expedienteId);
@@ -90,6 +92,7 @@ export class PagosController {
    *   source.onmessage = (e) => { const data = JSON.parse(e.data); ... };
    */
   @Sse('eventos/:referencia')
+  @Public()
   @HttpCode(HttpStatus.OK)
   streamEventosPago(
     @Param('referencia') referencia: string,
@@ -102,6 +105,7 @@ export class PagosController {
    * El frontend llama esto cuando el usuario regresa de la pasarela (polling fallback).
    */
   @Get('estado-por-referencia/:referencia')
+  @Public()
   @HttpCode(HttpStatus.OK)
   getEstadoPorReferencia(@Param('referencia') referencia: string) {
     const pago: Pago | undefined =
