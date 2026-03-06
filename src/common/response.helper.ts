@@ -6,7 +6,11 @@ export function successResponse(data: any, message?: string) {
   };
 }
 
-export function errorResponse(code: string, message: string, details: any = null) {
+export function errorResponse(
+  code: string,
+  message: string,
+  details: any = null,
+) {
   return {
     success: false,
     error: { code, message, details },

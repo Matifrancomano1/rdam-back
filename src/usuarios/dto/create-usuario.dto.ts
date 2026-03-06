@@ -8,7 +8,13 @@ import {
 } from 'class-validator';
 
 const ROLES = ['Ciudadano', 'Operador', 'Administrador'];
-const SEDES = ['Santa Fe', 'Rosario', 'Venado Tuerto', 'Rafaela', 'Reconquista'];
+const SEDES = [
+  'Santa Fe',
+  'Rosario',
+  'Venado Tuerto',
+  'Rafaela',
+  'Reconquista',
+];
 
 export class CreateUsuarioDto {
   @IsString()

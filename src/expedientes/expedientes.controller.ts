@@ -32,15 +32,25 @@ import { successResponse } from '../common/response.helper';
 import { IsString, IsOptional } from 'class-validator';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 
-const ALLOWED_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/jpg',
+];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 function validateUploadedFile(file: Express.Multer.File): void {
-  if (!file) throw new BadRequestException('MISSING_FILE: Se requiere un archivo');
+  if (!file)
+    throw new BadRequestException('MISSING_FILE: Se requiere un archivo');
   if (!ALLOWED_MIME_TYPES.includes(file.mimetype))
-    throw new BadRequestException(`INVALID_FILE_TYPE: Solo se aceptan PDF, JPG o PNG. Recibido: ${file.mimetype}`);
+    throw new BadRequestException(
+      `INVALID_FILE_TYPE: Solo se aceptan PDF, JPG o PNG. Recibido: ${file.mimetype}`,
+    );
   if (file.size > MAX_FILE_SIZE)
-    throw new BadRequestException(`FILE_TOO_LARGE: El tamaño máximo es 10 MB. Recibido: ${(file.size / 1024 / 1024).toFixed(2)} MB`);
+    throw new BadRequestException(
+      `FILE_TOO_LARGE: El tamaño máximo es 10 MB. Recibido: ${(file.size / 1024 / 1024).toFixed(2)} MB`,
+    );
 }
 
 class ActionDto {
@@ -91,19 +101,41 @@ export class ExpedientesController {
     return successResponse(data);
   }
 
+  @Post('publico/solicitar-codigo')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  async solicitarCodigoAcceso(@Body() body: { dni: string; email: string }) {
+    if (!body.dni || !body.email) {
+      throw new BadRequestException(
+        'Se requieren los parámetros "dni" y "email"',
+      );
+    }
+    return successResponse(
+      await this.expedientesService.solicitarCodigoAcceso(
+        body.dni.trim(),
+        body.email.trim(),
+      ),
+    );
+  }
+
   @Get('publico/buscar')
   @Public()
   @HttpCode(HttpStatus.OK)
   buscarPorDniEmail(
     @Query('dni') dni: string,
     @Query('email') email: string,
+    @Query('codigo') codigo: string,
   ) {
-    if (!dni || !email)
+    if (!dni || !email || !codigo)
       throw new BadRequestException(
-        'Se requieren los parámetros "dni" y "email" para la búsqueda pública',
+        'Se requieren los parámetros "dni", "email" y "codigo" para la búsqueda pública',
       );
     return successResponse(
-      this.expedientesService.buscarPorDniEmail(dni.trim(), email.trim()),
+      this.expedientesService.buscarPorDniEmail(
+        dni.trim(),
+        email.trim(),
+        codigo.trim(),
+      ),
     );
   }
 
@@ -151,7 +183,12 @@ export class ExpedientesController {
 
   @Post(':id/documentos')
   @Roles('Operador', 'Administrador')
-  @UseInterceptors(FileInterceptor('archivo', { storage: memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } }))
+  @UseInterceptors(
+    FileInterceptor('archivo', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE },
+    }),
+  )
   @HttpCode(HttpStatus.CREATED)
   uploadDocumento(
     @Param('id') id: string,
@@ -216,16 +253,24 @@ export class ExpedientesController {
 
   @Post(':id/certificado')
   @Roles('Operador', 'Administrador')
-  @UseInterceptors(FileInterceptor('archivo', { storage: memoryStorage(), limits: { fileSize: MAX_FILE_SIZE } }))
+  @UseInterceptors(
+    FileInterceptor('archivo', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE },
+    }),
+  )
   @HttpCode(HttpStatus.CREATED)
   subirCertificado(
     @Param('id') id: string,
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: JwtPayload,
   ) {
-    if (!file) throw new BadRequestException('MISSING_FILE: Se requiere un archivo PDF');
+    if (!file)
+      throw new BadRequestException('MISSING_FILE: Se requiere un archivo PDF');
     if (file.mimetype !== 'application/pdf')
-      throw new BadRequestException('INVALID_FILE_TYPE: Solo se aceptan archivos PDF para certificados');
+      throw new BadRequestException(
+        'INVALID_FILE_TYPE: Solo se aceptan archivos PDF para certificados',
+      );
     return successResponse(
       this.expedientesService.subirCertificadoPdf(id, file, user),
     );

@@ -10,6 +10,7 @@ import { createHash } from 'crypto';
 import { CreateExpedienteDto } from './dto/create-expediente.dto';
 import { UpdateExpedienteDto } from './dto/update-expediente.dto';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
+import { MailService } from '../mail/mail.service';
 
 export type EstadoExpediente =
   | 'Pendiente de Revisión'
@@ -84,6 +85,8 @@ export interface Expediente {
     sede: string;
     observaciones?: string;
     activo: boolean;
+    codigoAcceso?: string;
+    codigoAccesoExpires?: string;
   };
   historial: HistorialEntry[];
 }
@@ -99,6 +102,8 @@ function generateNumeroExpediente(): string {
 
 @Injectable()
 export class ExpedientesService {
+  constructor(private readonly mailService: MailService) {}
+
   create(dto: CreateExpedienteDto, user: JwtPayload) {
     const now = new Date().toISOString();
     const id = uuidv4();
@@ -227,10 +232,9 @@ export class ExpedientesService {
 
   /**
    * Búsqueda pública por DNI + email (sin autenticación).
-   * Usado por el portal ciudadano para encontrar su expediente.
-   * Valida que tanto el DNI como el email coincidan exactamente (case-insensitive para email).
+   * Genera un código de acceso y lo envía por correo.
    */
-  buscarPorDniEmail(dni: string, email: string) {
+  async solicitarCodigoAcceso(dni: string, email: string) {
     const exp = expedientesStore.find(
       (e) =>
         e.metadata.activo &&
@@ -242,6 +246,52 @@ export class ExpedientesService {
       throw new NotFoundException(
         'No se encontró un expediente activo con esos datos. Verificá el DNI y el email registrado.',
       );
+
+    // Generar código numérico de 6 dígitos
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutos
+
+    exp.metadata.codigoAcceso = codigo;
+    exp.metadata.codigoAccesoExpires = expires;
+
+    await this.mailService.sendExpedienteAccessCode(exp.deudor.email, codigo);
+
+    return { message: 'Código enviado exitosamente al correo registrado.' };
+  }
+
+  /**
+   * Búsqueda pública por DNI + email + código (sin autenticación).
+   * Valida el código de acceso antes de devolver el expediente.
+   */
+  buscarPorDniEmail(dni: string, email: string, codigo: string) {
+    const exp = expedientesStore.find(
+      (e) =>
+        e.metadata.activo &&
+        e.deudor.numeroIdentificacion === dni &&
+        e.deudor.email.toLowerCase() === email.toLowerCase(),
+    );
+
+    if (!exp)
+      throw new NotFoundException(
+        'No se encontró un expediente activo con esos datos. Verificá el DNI y el email registrado.',
+      );
+
+    if (!exp.metadata.codigoAcceso || exp.metadata.codigoAcceso !== codigo) {
+      throw new ForbiddenException('El código de acceso es incorrecto.');
+    }
+
+    if (
+      exp.metadata.codigoAccesoExpires &&
+      new Date(exp.metadata.codigoAccesoExpires) < new Date()
+    ) {
+      throw new ForbiddenException(
+        'El código de acceso ha expirado. Solicitá uno nuevo.',
+      );
+    }
+
+    // Opcional: Consumir el código para que sea de un solo uso
+    exp.metadata.codigoAcceso = undefined;
+    exp.metadata.codigoAccesoExpires = undefined;
 
     // Vista pública: no expone datos internos del operador ni metadata interna
     return {

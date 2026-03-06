@@ -64,9 +64,16 @@ export class CertificadosService {
   }
 
   validar(numeroCertificado: string) {
-    const cert = certificadosStore.find((c) => c.numeroCertificado === numeroCertificado);
+    const cert = certificadosStore.find(
+      (c) => c.numeroCertificado === numeroCertificado,
+    );
     if (!cert)
-      return { valido: false, numeroCertificado, estado: 'No encontrado', revocado: false };
+      return {
+        valido: false,
+        numeroCertificado,
+        estado: 'No encontrado',
+        revocado: false,
+      };
 
     const exp = expedientesStore.find((e) => e.id === cert.expedienteId);
     const ahora = new Date();

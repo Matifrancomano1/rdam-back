@@ -1,7 +1,19 @@
-import { IsString, IsEmail, IsOptional, IsBoolean, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  IsBoolean,
+  IsIn,
+} from 'class-validator';
 
 const ROLES = ['Ciudadano', 'Operador', 'Administrador'];
-const SEDES = ['Santa Fe', 'Rosario', 'Venado Tuerto', 'Rafaela', 'Reconquista'];
+const SEDES = [
+  'Santa Fe',
+  'Rosario',
+  'Venado Tuerto',
+  'Rafaela',
+  'Reconquista',
+];
 
 export class UpdateUsuarioDto {
   @IsOptional()

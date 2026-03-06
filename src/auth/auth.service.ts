@@ -164,7 +164,8 @@ export class AuthService {
 
       const user = usersStore.find((u) => u.id === payload.sub && u.activo);
       if (!user) throw new UnauthorizedException('User not found');
-      if (!user.isVerified) throw new UnauthorizedException('EMAIL_NOT_VERIFIED');
+      if (!user.isVerified)
+        throw new UnauthorizedException('EMAIL_NOT_VERIFIED');
 
       const newPayload = {
         sub: user.id,
@@ -246,7 +247,6 @@ export class AuthService {
     return { message: 'User successfully verified' };
   }
 
-
   /**
    * Resend verification email if user exists and isn't verified.
    * Enforces 5‑minute cooldown.
@@ -262,12 +262,17 @@ export class AuthService {
       user.lastVerificationEmailSent &&
       now.getTime() - user.lastVerificationEmailSent.getTime() < 5 * 60 * 1000
     ) {
-      throw new HttpException('WAIT_BEFORE_RETRY', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'WAIT_BEFORE_RETRY',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     // issue new token and expiration
     const token = uuidv4();
     user.verificationToken = token;
-    user.verificationTokenExpires = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    user.verificationTokenExpires = new Date(
+      now.getTime() + 24 * 60 * 60 * 1000,
+    );
     user.lastVerificationEmailSent = now;
     await this.mailService.sendVerificationEmail(user.email, token);
     return { message: 'Verification email resent' };

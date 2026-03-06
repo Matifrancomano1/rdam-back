@@ -21,7 +21,8 @@ class DeudorDto {
     message: 'El nombre completo no puede superar los 150 caracteres',
   })
   @Matches(/^[a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s'-]+$/, {
-    message:'El nombre completo solo puede contener letras, espacios y guiones',
+    message:
+      'El nombre completo solo puede contener letras, espacios y guiones',
   })
   nombreCompleto: string;
 
@@ -89,6 +90,7 @@ export class CreateExpedienteDto {
   @Type(() => DeudaDto)
   deuda: DeudaDto;
 
+  @IsString()
   @IsIn(['Santa Fe', 'Rosario', 'Venado Tuerto', 'Rafaela', 'Reconquista'], {
     message: 'La sede debe ser una de las sedes habilitadas',
   })

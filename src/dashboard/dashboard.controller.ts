@@ -16,6 +16,8 @@ export class DashboardController {
   @Get('actividad-reciente')
   getActividadReciente(@Query('limit') limit?: string) {
     const l = limit ? parseInt(limit) : 10;
-    return successResponse(this.dashboardService.getActividadReciente(Math.min(l, 50)));
+    return successResponse(
+      this.dashboardService.getActividadReciente(Math.min(l, 50)),
+    );
   }
 }

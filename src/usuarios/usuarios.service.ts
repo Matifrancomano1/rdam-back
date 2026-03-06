@@ -30,7 +30,8 @@ export class UsuariosService {
       );
     }
     if (query.rol) list = list.filter((u) => u.rol === query.rol);
-    if (query.activo !== undefined) list = list.filter((u) => u.activo === query.activo);
+    if (query.activo !== undefined)
+      list = list.filter((u) => u.activo === query.activo);
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 50;
@@ -91,7 +92,10 @@ export class UsuariosService {
     if (dto.departamento) user.departamento = dto.departamento;
     if (dto.activo !== undefined) user.activo = dto.activo;
 
-    return { ...this.toPublic(user), fechaActualizacion: new Date().toISOString() };
+    return {
+      ...this.toPublic(user),
+      fechaActualizacion: new Date().toISOString(),
+    };
   }
 
   softDelete(id: string) {
