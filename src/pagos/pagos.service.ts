@@ -171,8 +171,12 @@ export class PagosService {
     const pago = pagosStore.find(
       (p) => p.referenciaExterna === referenciaExterna,
     );
-    if (!pago) return;
+    if (!pago) {
+      console.log(`[PAGOS] Webhook recibido pero no se encontró pago con referenciaExterna: ${referenciaExterna}`);
+      return;
+    }
 
+    console.log(`[PAGOS] Procesando confirmación para pago id: ${pago.id}`);
     const now = new Date().toISOString();
     pago.estadoPago = 'confirmado';
     pago.fechaConfirmacion = now;

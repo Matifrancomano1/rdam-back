@@ -20,8 +20,9 @@ export class WebhooksService {
   constructor(private readonly pagosService: PagosService) {}
 
   procesarPagoConfirmado(body: PlusPagosWebhookPayload) {
+    console.log('--- WEBHOOK PAGO CONFIRMADO RECIBIDO ---', body);
     // EstadoId "3" = REALIZADA (aprobada)
-    if (body.EstadoId === '3') {
+    if (body.EstadoId == '3') {
       this.pagosService.confirmarPagoPasarela(body.TransaccionComercioId, {
         transaccionPlataformaId: body.TransaccionPlataformaId,
         estadoId: body.EstadoId,
@@ -32,6 +33,7 @@ export class WebhooksService {
   }
 
   procesarPagoRechazado(body: PlusPagosWebhookPayload) {
+    console.log('--- WEBHOOK PAGO RECHAZADO RECIBIDO ---', body);
     // EstadoId "4" = RECHAZADA o por CallbackCancel
     this.pagosService.rechazarPagoPasarela(body.TransaccionComercioId, {
       transaccionPlataformaId: body.TransaccionPlataformaId,
