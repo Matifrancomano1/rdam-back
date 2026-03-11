@@ -77,12 +77,7 @@ export class UsuariosController {
   @HttpCode(HttpStatus.OK)
   softDelete(@Param('id') id: string) {
     const data = this.usuariosService.softDelete(id);
-    return {
-      success: true,
-      message: 'Usuario desactivado exitosamente',
-      data,
-      timestamp: new Date().toISOString(),
-    };
+    return successResponse(data);
   }
 
   @Put(':id/password')

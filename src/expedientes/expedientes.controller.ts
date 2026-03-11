@@ -4,6 +4,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -67,6 +68,8 @@ class ValidarPagoDto {
 export class ExpedientesController {
   constructor(private readonly expedientesService: ExpedientesService) {}
 
+  // ─── RUTAS SIN PARÁMETROS ─────────────────────────────────────────
+
   @Post()
   @Roles('Operador', 'Administrador')
   @HttpCode(HttpStatus.CREATED)
@@ -100,6 +103,8 @@ export class ExpedientesController {
     });
     return successResponse(data);
   }
+
+  // ─── RUTAS PÚBLICAS (ANTES del wildcard :id) ─────────────────────
 
   @Post('publico/solicitar-codigo')
   @Public()
@@ -139,65 +144,11 @@ export class ExpedientesController {
     );
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return successResponse(this.expedientesService.findOne(id));
-  }
-
-  @Put(':id')
-  @Roles('Operador', 'Administrador')
-  update(@Param('id') id: string, @Body() dto: UpdateExpedienteDto) {
-    return successResponse(this.expedientesService.update(id, dto));
-  }
-
-  @Post(':id/aprobar')
-  @Roles('Operador', 'Administrador')
-  @HttpCode(HttpStatus.OK)
-  aprobar(
-    @Param('id') id: string,
-    @Body() dto: ActionDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return successResponse(
-      this.expedientesService.aprobar(id, dto.observaciones ?? '', user),
-    );
-  }
-
-  @Post(':id/rechazar')
-  @Roles('Operador', 'Administrador')
-  @HttpCode(HttpStatus.OK)
-  rechazar(
-    @Param('id') id: string,
-    @Body() dto: ActionDto,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    return successResponse(
-      this.expedientesService.rechazar(id, dto.observaciones ?? '', user),
-    );
-  }
+  // ─── RUTAS ESPECÍFICAS CON :id (ANTES del wildcard @Get(':id')) ──
 
   @Get(':id/historial')
   getHistorial(@Param('id') id: string) {
     return successResponse(this.expedientesService.getHistorial(id));
-  }
-
-  @Post(':id/documentos')
-  @Roles('Operador', 'Administrador')
-  @UseInterceptors(
-    FileInterceptor('archivo', {
-      storage: memoryStorage(),
-      limits: { fileSize: MAX_FILE_SIZE },
-    }),
-  )
-  @HttpCode(HttpStatus.CREATED)
-  uploadDocumento(
-    @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-    @CurrentUser() user: JwtPayload,
-  ) {
-    validateUploadedFile(file);
-    const data = this.expedientesService.addDocumento(id, file, user.id);
-    return successResponse({ ...data, expedienteId: id });
   }
 
   @Get(':id/documentos')
@@ -233,6 +184,127 @@ export class ExpedientesController {
     return successResponse({ expedienteId: id, pagos: exp.pagos });
   }
 
+  /**
+   * GET /v1/expedientes/:id/certificado/descargar-publico?dni=...&email=...
+   * PÚBLICO — permite al ciudadano descargar su certificado sin JWT.
+   * DEBE estar ANTES de :id/certificado/descargar para evitar conflicto de rutas.
+   */
+  @Get(':id/certificado/descargar-publico')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  descargarCertificadoPublico(
+    @Param('id') id: string,
+    @Query('dni') dni: string,
+    @Query('email') email: string,
+    @Res() res: Response,
+  ) {
+    console.log(
+      `[CONTROLLER] descargar-publico invocado — id: ${id}, dni: ${dni}, email: ${email}`,
+    );
+    if (!dni || !email) {
+      throw new BadRequestException(
+        'Se requieren los parámetros "dni" y "email"',
+      );
+    }
+    const cert = this.expedientesService.descargarCertificadoPublico(
+      id,
+      dni.trim(),
+      email.trim(),
+    );
+    const filename =
+      cert.nombreArchivo || `certificado_${cert.numeroCertificado}.pdf`;
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+      'X-Certificate-Hash': `sha256:${cert.hashSha256}`,
+      'X-Valid-Until': cert.fechaVencimiento.substring(0, 10),
+    });
+    res.send(cert.buffer);
+  }
+
+  @Get(':id/certificado/descargar')
+  descargarCertificado(
+    @Param('id') id: string,
+    @CurrentUser() user: JwtPayload,
+    @Res() res: Response,
+  ) {
+    const cert = this.expedientesService.descargarCertificadoPdf(id, user);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${cert.nombreArchivo}"`,
+      'X-Certificate-Hash': `sha256:${cert.hashSha256}`,
+      'X-Valid-Until': cert.fechaVencimiento.substring(0, 10),
+    });
+    res.send(cert.buffer);
+  }
+
+  // ─── WILDCARD :id (SIEMPRE AL FINAL de los GETs) ─────────────────
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return successResponse(this.expedientesService.findOne(id));
+  }
+
+  // ─── RUTAS POST/PUT/DELETE con :id ───────────────────────────────
+
+  @Put(':id')
+  @Roles('Operador', 'Administrador')
+  update(@Param('id') id: string, @Body() dto: UpdateExpedienteDto) {
+    return successResponse(this.expedientesService.update(id, dto));
+  }
+
+  @Delete(':id')
+  @Roles('Administrador')
+  @HttpCode(HttpStatus.OK)
+  remove(@Param('id') id: string, @CurrentUser() user: JwtPayload) {
+    return successResponse(this.expedientesService.remove(id, user));
+  }
+
+  @Post(':id/aprobar')
+  @Roles('Operador', 'Administrador')
+  @HttpCode(HttpStatus.OK)
+  aprobar(
+    @Param('id') id: string,
+    @Body() dto: ActionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return successResponse(
+      this.expedientesService.aprobar(id, dto.observaciones ?? '', user),
+    );
+  }
+
+  @Post(':id/rechazar')
+  @Roles('Operador', 'Administrador')
+  @HttpCode(HttpStatus.OK)
+  rechazar(
+    @Param('id') id: string,
+    @Body() dto: ActionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return successResponse(
+      this.expedientesService.rechazar(id, dto.observaciones ?? '', user),
+    );
+  }
+
+  @Post(':id/documentos')
+  @Roles('Operador', 'Administrador')
+  @UseInterceptors(
+    FileInterceptor('archivo', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE },
+    }),
+  )
+  @HttpCode(HttpStatus.CREATED)
+  uploadDocumento(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    validateUploadedFile(file);
+    const data = this.expedientesService.addDocumento(id, file, user.id);
+    return successResponse({ ...data, expedienteId: id });
+  }
+
   @Post(':id/validar-pago')
   @Roles('Operador', 'Administrador')
   @HttpCode(HttpStatus.OK)
@@ -266,7 +338,9 @@ export class ExpedientesController {
     @CurrentUser() user: JwtPayload,
   ) {
     if (!file)
-      throw new BadRequestException('MISSING_FILE: Se requiere un archivo PDF');
+      throw new BadRequestException(
+        'MISSING_FILE: Se requiere un archivo PDF',
+      );
     if (file.mimetype !== 'application/pdf')
       throw new BadRequestException(
         'INVALID_FILE_TYPE: Solo se aceptan archivos PDF para certificados',
@@ -274,21 +348,5 @@ export class ExpedientesController {
     return successResponse(
       this.expedientesService.subirCertificadoPdf(id, file, user),
     );
-  }
-
-  @Get(':id/certificado/descargar')
-  descargarCertificado(
-    @Param('id') id: string,
-    @CurrentUser() user: JwtPayload,
-    @Res() res: Response,
-  ) {
-    const cert = this.expedientesService.descargarCertificadoPdf(id, user);
-    res.set({
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="${cert.nombreArchivo}"`,
-      'X-Certificate-Hash': `sha256:${cert.hashSha256}`,
-      'X-Valid-Until': cert.fechaVencimiento.substring(0, 10),
-    });
-    res.send(cert.buffer);
   }
 }

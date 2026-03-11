@@ -20,7 +20,17 @@ export class WebhooksService {
   constructor(private readonly pagosService: PagosService) {}
 
   procesarPagoConfirmado(body: PlusPagosWebhookPayload) {
-    console.log('--- WEBHOOK PAGO CONFIRMADO RECIBIDO ---', body);
+    console.log(
+      `[WEBHOOK] Pago confirmado recibido — TransaccionComercioId: ${body.TransaccionComercioId}, EstadoId: ${body.EstadoId}, Monto: ${body.Monto}`,
+    );
+
+    if (!body.TransaccionComercioId) {
+      console.warn(
+        '[WEBHOOK] ⚠️ TransaccionComercioId vacío — ignorando webhook',
+      );
+      return;
+    }
+
     // EstadoId "3" = REALIZADA (aprobada)
     if (body.EstadoId == '3') {
       this.pagosService.confirmarPagoPasarela(body.TransaccionComercioId, {
@@ -29,11 +39,28 @@ export class WebhooksService {
         estadoTexto: body.Estado,
         fechaProcesamiento: body.FechaProcesamiento,
       });
+      console.log(
+        `[WEBHOOK] ✅ Pago procesado exitosamente para ${body.TransaccionComercioId}`,
+      );
+    } else {
+      console.warn(
+        `[WEBHOOK] ⚠️ EstadoId inesperado "${body.EstadoId}" en callback de confirmación para ${body.TransaccionComercioId}. Se esperaba "3" (REALIZADA).`,
+      );
     }
   }
 
   procesarPagoRechazado(body: PlusPagosWebhookPayload) {
-    console.log('--- WEBHOOK PAGO RECHAZADO RECIBIDO ---', body);
+    console.log(
+      `[WEBHOOK] Pago rechazado recibido — TransaccionComercioId: ${body.TransaccionComercioId}, EstadoId: ${body.EstadoId}`,
+    );
+
+    if (!body.TransaccionComercioId) {
+      console.warn(
+        '[WEBHOOK] ⚠️ TransaccionComercioId vacío — ignorando webhook de rechazo',
+      );
+      return;
+    }
+
     // EstadoId "4" = RECHAZADA o por CallbackCancel
     this.pagosService.rechazarPagoPasarela(body.TransaccionComercioId, {
       transaccionPlataformaId: body.TransaccionPlataformaId,
@@ -41,5 +68,8 @@ export class WebhooksService {
       estadoTexto: body.Estado,
       fechaProcesamiento: body.FechaProcesamiento,
     });
+    console.log(
+      `[WEBHOOK] ❌ Pago rechazado procesado para ${body.TransaccionComercioId}`,
+    );
   }
 }

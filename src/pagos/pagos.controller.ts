@@ -21,13 +21,31 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { successResponse } from '../common/response.helper';
 import { expedientesStore } from '../expedientes/expedientes.service';
-import { IsString, IsNumber, IsOptional, IsEmail, Min } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEmail,
+  Min,
+  IsNotEmpty,
+  IsUUID,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 class CrearOrdenPublicaDto {
-  @IsString() expedienteId: string;
-  @Type(() => Number) @IsNumber() @Min(0.01) monto: number;
-  @IsEmail() @IsOptional() email?: string;
+  @IsString()
+  @IsNotEmpty({ message: 'El expedienteId es requerido' })
+  @IsUUID('4', { message: 'El expedienteId debe ser un UUID válido' })
+  expedienteId: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  monto: number;
+
+  @IsEmail()
+  @IsOptional()
+  email?: string;
 }
 
 @Controller('pagos')

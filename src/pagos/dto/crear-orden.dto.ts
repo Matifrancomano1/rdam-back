@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsEmail,
   IsOptional,
+  IsNotEmpty,
   Min,
   Max,
 } from 'class-validator';
@@ -10,6 +11,7 @@ import { Type } from 'class-transformer';
 
 export class CrearOrdenDto {
   @IsString()
+  @IsNotEmpty({ message: 'El expedienteId es requerido' })
   expedienteId: string;
 
   @Type(() => Number)

@@ -13,6 +13,7 @@ import type { Response as Res } from 'express';
 import { CertificadosService } from './certificados.service';
 import { GenerarCertificadoDto } from './dto/generar-certificado.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { Public } from '../common/decorators/public.decorator';
 import { successResponse } from '../common/response.helper';
 
 @Controller('certificados')
@@ -27,7 +28,7 @@ export class CertificadosController {
   }
 
   @Get('validar/:numeroCertificado')
-  // Public endpoint - no JWT required
+  @Public()
   validar(@Param('numeroCertificado') numeroCertificado: string) {
     return successResponse(this.certificadosService.validar(numeroCertificado));
   }

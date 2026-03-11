@@ -30,14 +30,43 @@ export class DashboardService {
     const pct = (n: number) =>
       total > 0 ? parseFloat(((n / total) * 100).toFixed(2)) : 0;
 
+    // BUG 4 FIX: Contar mes ACTUAL, no el anterior
     const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastMonthExps = all.filter(
-      (e) =>
-        new Date(e.metadata.fechaCreacion) >= lastMonth &&
-        new Date(e.metadata.fechaCreacion) < thisMonth,
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    // Expedientes creados este mes
+    const thisMonthExps = all.filter(
+      (e) => new Date(e.metadata.fechaCreacion) >= thisMonthStart,
     );
+
+    // Contar aprobados/rechazados por historial del mes actual (no por estado actual)
+    let aprobadosMes = 0;
+    let rechazadosMes = 0;
+    let certificadosMes = 0;
+    for (const exp of all) {
+      for (const h of exp.historial) {
+        if (new Date(h.fechaCambio) >= thisMonthStart) {
+          if (h.estadoNuevo === 'Aprobado - Pendiente de Pago') aprobadosMes++;
+          if (h.estadoNuevo === 'Rechazado') rechazadosMes++;
+          if (h.estadoNuevo === 'Certificado Emitido') certificadosMes++;
+        }
+      }
+    }
+
+    // Alertas: certificados próximos a expirar (<=30 días)
+    let proximosExpirar = 0;
+    let pendientesVencidos = 0;
+    for (const exp of all) {
+      if (exp.certificadoPdf?.fechaVencimiento) {
+        const diasRestantes = Math.ceil(
+          (new Date(exp.certificadoPdf.fechaVencimiento).getTime() -
+            now.getTime()) /
+            (1000 * 60 * 60 * 24),
+        );
+        if (diasRestantes <= 0) pendientesVencidos++;
+        else if (diasRestantes <= 30) proximosExpirar++;
+      }
+    }
 
     return {
       totales: {
@@ -72,32 +101,34 @@ export class DashboardService {
           cantidad: rechazados,
           porcentaje: pct(rechazados),
         },
-        { estado: 'Expirado', cantidad: expirados, porcentaje: pct(expirados) },
+        {
+          estado: 'Expirado',
+          cantidad: expirados,
+          porcentaje: pct(expirados),
+        },
       ],
       tendencias: {
         ultimoMes: {
-          nuevos: lastMonthExps.length,
-          aprobados: lastMonthExps.filter(
-            (e) => e.estado.actual === 'Aprobado - Pendiente de Pago',
-          ).length,
-          rechazados: lastMonthExps.filter(
-            (e) => e.estado.actual === 'Rechazado',
-          ).length,
-          certificados: lastMonthExps.filter(
-            (e) => e.estado.actual === 'Certificado Emitido',
-          ).length,
+          nuevos: thisMonthExps.length,
+          aprobados: aprobadosMes,
+          rechazados: rechazadosMes,
+          certificados: certificadosMes,
         },
-        variacion: { nuevos: 0, aprobados: 0, rechazados: 0, certificados: 0 },
+        variacion: {
+          nuevos: 0,
+          aprobados: 0,
+          rechazados: 0,
+          certificados: 0,
+        },
       },
       alertas: {
-        proximosExpirar: 0,
-        pendientesVencidos: 0,
+        proximosExpirar,
+        pendientesVencidos,
       },
     };
   }
 
   getActividadReciente(limit: number = 10) {
-    // Gather historial entries from all expedientes, sorted by date desc
     const actividades: ActividadEntry[] = [];
     for (const exp of expedientesStore) {
       for (const h of exp.historial) {
@@ -124,7 +155,7 @@ export class DashboardService {
     const map: Record<string, string> = {
       'Pendiente de Revisión': 'EXPEDIENTE_CREADO',
       'Aprobado - Pendiente de Pago': 'EXPEDIENTE_APROBADO',
-      'Rechazado ': 'EXPEDIENTE_RECHAZADO',
+      'Rechazado': 'EXPEDIENTE_RECHAZADO',
       'Pago Confirmado - Pendiente Validación': 'PAGO_CONFIRMADO',
       'Certificado Emitido': 'CERTIFICADO_EMITIDO',
     };

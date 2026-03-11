@@ -11,6 +11,8 @@ import { CreateExpedienteDto } from './dto/create-expediente.dto';
 import { UpdateExpedienteDto } from './dto/update-expediente.dto';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
 import { MailService } from '../mail/mail.service';
+import { certificadosStore } from '../certificados/certificados.service';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 export type EstadoExpediente =
   | 'Pendiente de Revisión'
@@ -102,7 +104,10 @@ function generateNumeroExpediente(): string {
 
 @Injectable()
 export class ExpedientesService {
-  constructor(private readonly mailService: MailService) {}
+  constructor(
+    private readonly mailService: MailService,
+    private readonly auditoriaService: AuditoriaService,
+  ) {}
 
   create(dto: CreateExpedienteDto, user: JwtPayload) {
     const now = new Date().toISOString();
@@ -142,6 +147,17 @@ export class ExpedientesService {
       ],
     };
     expedientesStore.push(expediente);
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'EXPEDIENTE_CREADO',
+      entidad: 'expediente',
+      entidadId: id,
+      detalles: { numeroExpediente: expediente.numeroExpediente },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
+    });
+
     return this.toResponse(expediente);
   }
 
@@ -317,6 +333,14 @@ export class ExpedientesService {
         fechaSubida: d.fechaSubida,
       })),
       tieneCertificado: !!exp.certificadoPdf,
+      certificado: exp.certificadoPdf
+        ? {
+            numeroCertificado: exp.certificadoPdf.numeroCertificado,
+            fechaEmision: exp.certificadoPdf.fechaEmision,
+            fechaVencimiento: exp.certificadoPdf.fechaVencimiento,
+            urlDescarga: `/expedientes/${exp.id}/certificado/descargar-publico`,
+          }
+        : null,
     };
   }
 
@@ -332,6 +356,62 @@ export class ExpedientesService {
     if (dto.observaciones) exp.metadata.observaciones = dto.observaciones;
     exp.metadata.fechaActualizacion = new Date().toISOString();
     return this.toResponse(exp);
+  }
+
+  remove(id: string, user: JwtPayload) {
+    const exp = expedientesStore.find((e) => e.id === id);
+    if (!exp) throw new NotFoundException('Expediente no encontrado');
+
+    if (!exp.metadata.activo) {
+      throw new ConflictException('El expediente ya fue eliminado');
+    }
+
+    // Prevent deleting expedientes with confirmed payments or certificates
+    const estadosProtegidos: string[] = [
+      'Pago Confirmado - Pendiente Validación',
+      'Certificado Emitido',
+    ];
+    if (estadosProtegidos.includes(exp.estado.actual)) {
+      throw new ConflictException(
+        `No se puede eliminar un expediente en estado "${exp.estado.actual}"`,
+      );
+    }
+
+    const now = new Date().toISOString();
+    exp.metadata.activo = false;
+    exp.metadata.fechaActualizacion = now;
+    exp.historial.push({
+      id: uuidv4(),
+      estadoAnterior: exp.estado.actual,
+      estadoNuevo: exp.estado.actual,
+      usuario: { id: user.id, nombre: user.nombre },
+      fechaCambio: now,
+      observaciones: 'Expediente eliminado (soft delete)',
+      ipAddress: '0.0.0.0',
+      metadata: { accion: 'eliminado' },
+    });
+
+    console.log(
+      `[EXPEDIENTE] Eliminado (soft delete) ${exp.numeroExpediente} por ${user.id} (${user.nombre})`,
+    );
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'EXPEDIENTE_ELIMINADO',
+      entidad: 'expediente',
+      entidadId: id,
+      detalles: { numeroExpediente: exp.numeroExpediente },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
+    });
+
+    return {
+      id: exp.id,
+      numeroExpediente: exp.numeroExpediente,
+      eliminado: true,
+      fechaEliminacion: now,
+      eliminadoPor: user.id,
+    };
   }
 
   aprobar(id: string, observaciones: string, user: JwtPayload) {
@@ -355,6 +435,20 @@ export class ExpedientesService {
       observaciones,
       ipAddress: '0.0.0.0',
       metadata: {},
+    });
+
+    console.log(
+      `[EXPEDIENTE] Aprobado ${exp.numeroExpediente} por usuario ${user.id} (${user.nombre})`,
+    );
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'EXPEDIENTE_APROBADO',
+      entidad: 'expediente',
+      entidadId: id,
+      detalles: { numeroExpediente: exp.numeroExpediente, observaciones },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
     });
 
     return {
@@ -395,6 +489,20 @@ export class ExpedientesService {
       observaciones,
       ipAddress: '0.0.0.0',
       metadata: {},
+    });
+
+    console.log(
+      `[EXPEDIENTE] Rechazado ${exp.numeroExpediente} por usuario ${user.id} (${user.nombre}). Motivo: ${observaciones}`,
+    );
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'EXPEDIENTE_RECHAZADO',
+      entidad: 'expediente',
+      entidadId: id,
+      detalles: { numeroExpediente: exp.numeroExpediente, observaciones },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
     });
 
     return {
@@ -492,6 +600,10 @@ export class ExpedientesService {
       metadata: { pagoId },
     });
 
+    console.log(
+      `[EXPEDIENTE] Pago validado para ${exp.numeroExpediente}. PagoId: ${pagoId}, validado por ${user.id} (${user.nombre})`,
+    );
+
     return {
       expedienteId: exp.id,
       pagoId,
@@ -559,6 +671,20 @@ export class ExpedientesService {
 
     exp.certificadoPdf = cert;
 
+    // Sync with certificadosStore so validar() can find it
+    certificadosStore.push({
+      id: certId,
+      numeroCertificado,
+      expedienteId: id,
+      fechaEmision: now.toISOString(),
+      fechaVencimiento: vencimiento.toISOString(),
+      archivoUrl: `/expedientes/${id}/certificado/descargar`,
+      codigoQR: `https://rdam.gob.ar/validar/${numeroCertificado}`,
+      hash,
+      revocado: false,
+      contadorDescargas: 0,
+    });
+
     // Transition state
     const estadoAnterior = exp.estado.actual;
     exp.estado.actual = 'Certificado Emitido';
@@ -573,6 +699,10 @@ export class ExpedientesService {
       ipAddress: '0.0.0.0',
       metadata: { certId, numeroCertificado },
     });
+
+    console.log(
+      `[EXPEDIENTE] Certificado PDF subido para ${exp.numeroExpediente}. Cert: ${numeroCertificado}, Hash: sha256:${hash.substring(0, 16)}...`,
+    );
 
     return {
       id: certId,
@@ -606,6 +736,46 @@ export class ExpedientesService {
           'INSUFFICIENT_PERMISSIONS: El email no coincide con el del expediente',
         );
     }
+
+    return exp.certificadoPdf;
+  }
+
+  /**
+   * Descarga pública del certificado PDF — sin JWT.
+   * Valida identidad del deudor por DNI + email.
+   * Mensajes de error genéricos por seguridad (no revelan si el expediente existe).
+   */
+  descargarCertificadoPublico(id: string, dni: string, email: string) {
+    const exp = expedientesStore.find((e) => e.id === id);
+
+    // Seguridad: mensaje genérico para no revelar existencia del expediente
+    if (
+      !exp ||
+      exp.deudor.numeroIdentificacion !== dni ||
+      exp.deudor.email.toLowerCase() !== email.toLowerCase()
+    ) {
+      console.warn(
+        `[EXPEDIENTE] ⚠️ Intento fallido de descarga pública — id: ${id}, dni: ${dni}, email: ${email}`,
+      );
+      throw new ForbiddenException('Datos de verificación incorrectos');
+    }
+
+    // Validar estado del expediente
+    if (exp.estado.actual !== 'Certificado Emitido') {
+      console.warn(
+        `[EXPEDIENTE] Descarga denegada — ${exp.numeroExpediente} en estado "${exp.estado.actual}"`,
+      );
+      throw new BadRequestException('El certificado aún no está disponible');
+    }
+
+    // Validar que exista el PDF
+    if (!exp.certificadoPdf) {
+      throw new NotFoundException('Certificado no encontrado');
+    }
+
+    console.log(
+      `[EXPEDIENTE] ✅ Descarga pública exitosa — ${exp.numeroExpediente} (DNI: ${dni})`,
+    );
 
     return exp.certificadoPdf;
   }

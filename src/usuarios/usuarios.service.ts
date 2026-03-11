@@ -9,9 +9,12 @@ import * as bcrypt from 'bcryptjs';
 import { usersStore, StoredUser } from '../auth/auth.service';
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
+import { AuditoriaService } from '../auditoria/auditoria.service';
 
 @Injectable()
 export class UsuariosService {
+  constructor(private readonly auditoriaService: AuditoriaService) {}
+
   findAll(query: {
     search?: string;
     rol?: string;
@@ -78,6 +81,17 @@ export class UsuariosService {
       lastVerificationEmailSent: undefined,
     };
     usersStore.push(user);
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'USUARIO_CREADO',
+      entidad: 'usuario',
+      entidadId: user.id,
+      detalles: { username: user.username, rol: user.rol },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
+    });
+
     return this.toPublic(user);
   }
 
@@ -102,6 +116,17 @@ export class UsuariosService {
     const user = usersStore.find((u) => u.id === id);
     if (!user) throw new NotFoundException('Usuario no encontrado');
     user.activo = false;
+
+    this.auditoriaService.registrar({
+      usuario: { id: user.id, nombre: user.nombre },
+      accion: 'USUARIO_ELIMINADO',
+      entidad: 'usuario',
+      entidadId: user.id,
+      detalles: { username: user.username },
+      ipAddress: '0.0.0.0',
+      userAgent: '',
+    });
+
     return {
       id: user.id,
       username: user.username,

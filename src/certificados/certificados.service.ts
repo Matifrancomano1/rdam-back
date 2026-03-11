@@ -51,6 +51,11 @@ export class CertificadosService {
       contadorDescargas: 0,
     };
     certificadosStore.push(cert);
+
+    console.log(
+      `[CERT] Certificado generado: ${numeroCertificado} para expediente ${exp.numeroExpediente}`,
+    );
+
     return cert;
   }
 
@@ -60,35 +65,107 @@ export class CertificadosService {
     if (!cert.fechaPrimeraDescarga)
       cert.fechaPrimeraDescarga = new Date().toISOString();
     cert.contadorDescargas++;
+
+    console.log(
+      `[CERT] Descarga de certificado ${cert.numeroCertificado} (descarga #${cert.contadorDescargas})`,
+    );
+
     return cert;
   }
 
   validar(numeroCertificado: string) {
-    const cert = certificadosStore.find(
+    let cert = certificadosStore.find(
       (c) => c.numeroCertificado === numeroCertificado,
     );
-    if (!cert)
+
+    // Fallback: search in expedientesStore by certificadoPdf
+    let exp = cert
+      ? expedientesStore.find((e) => e.id === cert!.expedienteId)
+      : expedientesStore.find(
+          (e) => e.certificadoPdf?.numeroCertificado === numeroCertificado,
+        );
+
+    // If found in expedientesStore but not in certificadosStore, build cert
+    if (!cert && exp?.certificadoPdf) {
+      cert = {
+        id: exp.certificadoPdf.id,
+        numeroCertificado: exp.certificadoPdf.numeroCertificado,
+        expedienteId: exp.id,
+        fechaEmision: exp.certificadoPdf.fechaEmision,
+        fechaVencimiento: exp.certificadoPdf.fechaVencimiento,
+        archivoUrl: exp.certificadoPdf.urlDescarga,
+        codigoQR: '',
+        hash: exp.certificadoPdf.hashSha256,
+        revocado: false,
+        contadorDescargas: 0,
+      };
+    }
+
+    if (!cert) {
+      console.log(
+        `[CERT] Validación fallida: certificado ${numeroCertificado} no encontrado`,
+      );
       return {
         valido: false,
         numeroCertificado,
         estado: 'No encontrado',
         revocado: false,
       };
+    }
 
-    const exp = expedientesStore.find((e) => e.id === cert.expedienteId);
+    if (!exp) {
+      exp = expedientesStore.find((e) => e.id === cert.expedienteId);
+    }
     const ahora = new Date();
     const vencido = new Date(cert.fechaVencimiento) < ahora;
 
+    // Verificar integridad del hash si el expediente tiene certificadoPdf
+    let hashIntegro = true;
+    if (exp?.certificadoPdf?.buffer) {
+      const hashRecalculado = createHash('sha256')
+        .update(exp.certificadoPdf.buffer)
+        .digest('hex');
+      hashIntegro = exp.certificadoPdf.hashSha256 === hashRecalculado;
+      if (!hashIntegro) {
+        console.warn(
+          `[CERT] ⚠️ INTEGRIDAD COMPROMETIDA: Hash del certificado ${numeroCertificado} no coincide. Almacenado: ${exp.certificadoPdf.hashSha256.substring(0, 16)}... Recalculado: ${hashRecalculado.substring(0, 16)}...`,
+        );
+      }
+    }
+
+    const valido = !cert.revocado && !vencido && hashIntegro;
+    const diasRestantes = Math.max(
+      0,
+      Math.ceil(
+        (new Date(cert.fechaVencimiento).getTime() - ahora.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ),
+    );
+    const proximoAVencer = !vencido && diasRestantes <= 30;
+
+    console.log(
+      `[CERT] Validación de ${numeroCertificado}: ${valido ? 'VÁLIDO' : 'INVÁLIDO'} (revocado=${cert.revocado}, vencido=${vencido}, diasRestantes=${diasRestantes}, hashIntegro=${hashIntegro})`,
+    );
+
+    let estado: string;
+    if (cert.revocado) estado = 'Revocado';
+    else if (!hashIntegro) estado = 'Integridad comprometida';
+    else if (vencido) estado = 'Vencido';
+    else if (proximoAVencer) estado = 'Próximo a vencer';
+    else estado = 'Vigente';
+
     return {
-      valido: !cert.revocado && !vencido,
+      valido,
       numeroCertificado: cert.numeroCertificado,
       expediente: exp?.numeroExpediente ?? '',
       deudor: exp?.deudor.nombreCompleto ?? '',
       numeroIdentificacion: exp?.deudor.numeroIdentificacion ?? '',
       fechaEmision: cert.fechaEmision,
       fechaVencimiento: cert.fechaVencimiento,
-      estado: cert.revocado ? 'Revocado' : vencido ? 'Vencido' : 'Vigente',
+      diasRestantes,
+      estado,
       revocado: cert.revocado,
+      hashIntegro,
     };
   }
 }
